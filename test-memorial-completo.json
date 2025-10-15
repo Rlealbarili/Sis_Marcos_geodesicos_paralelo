@@ -1,0 +1,49 @@
+{
+  "cliente": {
+    "novo": true,
+    "nome": "João da Silva",
+    "cpf_cnpj": "123.456.789-00",
+    "telefone": "(41) 99999-9999",
+    "email": "joao@email.com"
+  },
+  "propriedade": {
+    "nome_propriedade": "Fazenda Teste API",
+    "matricula": "MAT-API-001",
+    "tipo": "RURAL",
+    "municipio": "Campo Largo",
+    "uf": "PR",
+    "area_m2": 50000,
+    "perimetro_m": 1000
+  },
+  "vertices": [
+    {
+      "nome": "V1",
+      "ordem": 1,
+      "coordenadas": {
+        "tipo": "UTM",
+        "e": 654000,
+        "n": 7199000,
+        "lat_original": -25.315,
+        "lon_original": -49.470
+      }
+    },
+    {
+      "nome": "V2",
+      "ordem": 2,
+      "coordenadas": {
+        "tipo": "UTM",
+        "e": 654100,
+        "n": 7199000,
+        "lat_original": -25.315,
+        "lon_original": -49.469
+      }
+    }
+  ],
+  "memorial": {
+    "arquivo_nome": "teste.docx",
+    "estatisticas": {
+      "vertices_unicos": 2,
+      "metadados_extraidos": 5
+    }
+  }
+}

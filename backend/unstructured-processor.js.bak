@@ -1,0 +1,170 @@
+const proj4 = require('proj4');
+
+class UnstructuredProcessor {
+    constructor() {
+        // SIRGAS 2000 Geográfico para UTM Zona 22S
+        this.sourceProjection = 'EPSG:4674'; // SIRGAS 2000
+        this.targetProjection = 'EPSG:31982'; // SIRGAS 2000 / UTM zone 22S
+        this.extractors = [
+            // Padrão URBANO - Formato: marco 'NOME' (E=XXX,XX m e N=YYY,YY m)
+            {
+                name: 'UTM_URBANO_PRINCIPAL',
+                type: 'UTM',
+                regex: /(?:marco|MARCO)\s+['"']?([^'"'\(\)]+?)['"']?\s*\(E\s*=\s*([\d.,]+)\s*[mM]\s+[eE]\s+N\s*=\s*([\d.,]+)\s*[mM]\)/gi
+            },
+
+            // Padrão URBANO alternativo - DENOMINADO
+            {
+                name: 'UTM_URBANO_DENOMINADO',
+                type: 'UTM',
+                regex: /E\s*=\s*([\d.,]+)\s*[mM]\s+[eE]\s+N\s*=\s*([\d.,]+)\s*[mM].*?DENOMINADO\s+['"']?([^'"'\(\)]+?)['"']?/gi
+            },
+
+            // Padrão RURAL - GMS (Graus, Minutos, Segundos)
+            {
+                name: 'GEO_RURAL_LAT_LONG',
+                type: 'GEO',
+                regex: /VÉRTICE\s+([A-Z0-9-]+)\s*,\s*DE\s+COORDENADAS\s+(?:LAT|LATITUDE)\s+([\d°'".,\s]+[NS])\s*,\s*(?:LONG|LONGITUDE)\s*:?\s*([\d°'".,\s]+[WEO])/gi
+            },
+
+            // Padrão RURAL alternativo
+            {
+                name: 'GEO_RURAL_LONG_LAT',
+                type: 'GEO',
+                regex: /VÉRTICE\s+([A-Z0-9-]+)\s*,\s*DE\s+COORDENADAS\s+(?:LONG|LONGITUDE)\s*:?\s*([\d°'".,\s-]+)\s*,\s*(?:LAT|LATITUDE)\s*:?\s*([\d°'".,\s-]+)/gi
+            }
+        ];
+    }
+
+    _normalizeText(text) {
+        if (!text) return '';
+        let normalized = text.toUpperCase().replace(/\r\n?/g, '\n').replace(/\s+/g, ' ');
+        normalized = normalized.replace(/(\d)\.(?=\d{3})/g, '$1');
+        normalized = normalized.replace(/,/g, '.');
+        return normalized;
+    }
+
+    _convertDMSToDD(coordString) {
+        if (!coordString) return null;
+        const parts = coordString.match(/(\d+)[°º]\s*(\d+)'\s*([\d.]+)"\s*([NSWEOL])/i);
+        if (!parts) {
+            const decimalMatch = coordString.match(/(-?\d+\.\d+)/);
+            if (decimalMatch) return parseFloat(decimalMatch[0]);
+            return null;
+        }
+        const [, deg, min, sec, dir] = parts;
+        let decimal = parseFloat(deg) + (parseFloat(min) / 60) + (parseFloat(sec) / 3600);
+        if (['S', 'W', 'O'].includes(dir) || parseFloat(deg) < 0) {
+            decimal = -decimal;
+        }
+        return decimal;
+    }
+
+    processUnstructuredResponse(elements) {
+        console.log(`[Processor] Recebidos ${elements.length} elementos do Unstructured.`);
+        const vertices = [];
+        const verticesEncontrados = new Set(); // Evitar duplicatas
+
+        // Juntar todo o texto em uma única string para processar
+        const textoCompleto = elements.map(el => el.text).join('\n');
+        const textoNormalizado = this._normalizeText(textoCompleto);
+
+        console.log('[Processor] Texto normalizado, iniciando extração...');
+
+        // Testar cada extractor
+        for (const extractor of this.extractors) {
+            console.log(`[Processor] Testando padrão: ${extractor.name}`);
+
+            // Reset do regex para garantir que funcione múltiplas vezes
+            extractor.regex.lastIndex = 0;
+
+            let match;
+            let count = 0;
+
+            while ((match = extractor.regex.exec(textoNormalizado)) !== null) {
+                count++;
+
+                try {
+                    let vertex;
+
+                    if (extractor.type === 'UTM') {
+                        // Para UTM urbano: match[1]=nome, match[2]=E, match[3]=N
+                        // OU match[1]=E, match[2]=N, match[3]=nome (DENOMINADO)
+                        let nome, e, n;
+
+                        if (extractor.name === 'UTM_URBANO_DENOMINADO') {
+                            e = match[1];
+                            n = match[2];
+                            nome = match[3];
+                        } else {
+                            nome = match[1];
+                            e = match[2];
+                            n = match[3];
+                        }
+
+                        // Converter coordenadas (já foram normalizadas por _normalizeText)
+                        e = parseFloat(e);
+                        n = parseFloat(n);
+
+                        // Validar coordenadas UTM Zone 22S
+                        if (e < 600000 || e > 800000 || n < 7000000 || n > 7500000) {
+                            console.log(`[Processor] ⚠️ Coordenadas fora do range: ${nome} (E=${e}, N=${n})`);
+                            continue;
+                        }
+
+                        vertex = {
+                            nome: nome.trim(),
+                            coordenadas: {
+                                tipo: 'UTM',
+                                e: e,
+                                n: n
+                            }
+                        };
+
+                    } else if (extractor.type === 'GEO') {
+                        // Para GEO: match[1]=nome, match[2]=lat, match[3]=lon
+                        const nome = match[1].trim();
+                        const lat = this._convertDMSToDD(match[2]);
+                        const lon = this._convertDMSToDD(match[3]);
+
+                        if (lat === null || lon === null) {
+                            console.log(`[Processor] ⚠️ Falha na conversão DMS: ${nome}`);
+                            continue;
+                        }
+
+                        const utm = proj4(this.sourceProjection, this.targetProjection, [lon, lat]);
+
+                        vertex = {
+                            nome: nome,
+                            coordenadas: {
+                                tipo: 'UTM',
+                                e: utm[0],
+                                n: utm[1],
+                                lat_orig: lat,
+                                lon_orig: lon
+                            }
+                        };
+                    }
+
+                    // Adicionar apenas se não for duplicata
+                    const chave = `${vertex.nome}-${vertex.coordenadas.e}-${vertex.coordenadas.n}`;
+                    if (!verticesEncontrados.has(chave)) {
+                        verticesEncontrados.add(chave);
+                        vertices.push(vertex);
+                        console.log(`[Processor] ✅ Vértice extraído: ${vertex.nome} (E=${vertex.coordenadas.e.toFixed(2)}, N=${vertex.coordenadas.n.toFixed(2)})`);
+                    }
+
+                } catch (error) {
+                    console.error(`[Processor] Erro ao processar match:`, error.message);
+                }
+            }
+
+            console.log(`[Processor] Padrão '${extractor.name}' encontrou ${count} matches`);
+        }
+
+        console.log(`[Processor] Extração finalizada. Total de vértices únicos: ${vertices.length}`);
+        return { vertices };
+    }
+}
+
+module.exports = UnstructuredProcessor;
