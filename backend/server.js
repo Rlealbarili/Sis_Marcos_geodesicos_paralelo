@@ -10,15 +10,48 @@ const axios = require('axios');
 const FormData = require('form-data');
 const UnstructuredProcessor = require('./unstructured-processor.js');
 const proj4 = require('proj4');
+const compression = require('compression');
 const { executarMigracaoValidacao } = require('./utils/migracao-validacao');
 const validador = require('./utils/validador-coordenadas');
+
+// ==========================================
+// CONFIGURAR TIMEZONE PARA O BRASIL
+// ==========================================
+process.env.TZ = 'America/Sao_Paulo';
+
+// Função para obter data/hora no timezone do Brasil
+function getDataHoraBrasil() {
+    const agora = new Date();
+    const offsetBrasil = -3 * 60; // UTC-3
+    const offsetLocal = agora.getTimezoneOffset();
+    const diff = offsetBrasil - offsetLocal;
+
+    const dataBrasil = new Date(agora.getTime() + diff * 60000);
+    return dataBrasil.toISOString();
+}
+
+console.log('[Server] Timezone configurada:', process.env.TZ);
+console.log('[Server] Data/hora atual:', new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }));
 
 const app = express();
 const PORT = 3000;
 
 app.use(cors());
+
+// Habilitar compressão gzip para todas as respostas
+app.use(compression({
+  level: 6, // balanço entre speed e compression
+  threshold: 1024 // só comprimir responses > 1KB
+}));
+
 app.use(express.json());
-app.use(express.static(path.join(__dirname, '../frontend')));
+
+// Cache headers para assets estáticos
+app.use(express.static(path.join(__dirname, '../frontend'), {
+  maxAge: '1d',
+  etag: true,
+  lastModified: true
+}));
 
 // Configuração do multer para salvar em disco (usado pelos endpoints antigos)
 const upload = multer({ dest: 'uploads/' });
@@ -176,46 +209,141 @@ app.get('/', (req, res) => {
 
 app.get('/api/marcos', (req, res) => {
     try {
-        const { tipo, codigo, localizacao, lote, metodo, limites, ativo = '1' } = req.query;
-        
-        let query = 'SELECT * FROM marcos WHERE ativo = ?';
+        let { bbox, tipo, codigo, localizacao, lote, metodo, limites, uf, status_campo, ativo = '1', limite = 2000, offset = 0, format = 'json' } = req.query;
+
+        // IMPORTANTE: Respeitar o limite (máximo de 5000 marcos)
+        limite = Math.min(parseInt(limite) || 2000, 5000);
+        offset = parseInt(offset) || 0;
+
+        console.log(`[Server] Buscando marcos - limite: ${limite}, offset: ${offset}, format: ${format}`);
+
+        // Query otimizada - selecionar apenas campos necessários
+        let query = `
+            SELECT
+                id,
+                codigo as nome,
+                tipo,
+                localizacao as municipio,
+                '' as uf,
+                ROUND(CAST(REPLACE(coordenada_n, ',', '.') AS REAL) / 1000000, 6) as latitude,
+                ROUND(CAST(REPLACE(coordenada_e, ',', '.') AS REAL) / 1000000, 6) as longitude,
+                ROUND(CAST(REPLACE(altitude_h, ',', '.') AS REAL), 2) as altitude,
+                status_campo as status
+            FROM marcos
+            WHERE ativo = ?
+        `;
         const params = [ativo];
-        
-        if (tipo) {
-            query += ' AND tipo LIKE ?';
-            params.push(`%${tipo}%`);
-        }
-        if (codigo) {
-            query += ' AND codigo LIKE ?';
-            params.push(`%${codigo}%`);
-        }
-        if (localizacao) {
-            query += ' AND localizacao LIKE ?';
-            params.push(`%${localizacao}%`);
-        }
-        if (lote) {
-            query += ' AND lote LIKE ?';
-            params.push(`%${lote}%`);
-        }
-        if (metodo) {
-            query += ' AND metodo LIKE ?';
-            params.push(`%${metodo}%`);
-        }
-        if (limites) {
-            query += ' AND limites LIKE ?';
-            params.push(`%${limites}%`);
-        }
-        if (req.query.status_campo) {
-            query += ' AND status_campo = ?';
-            params.push(req.query.status_campo);
+
+        // Filtro por bbox (viewport do mapa)
+        if (bbox) {
+            const [west, south, east, north] = bbox.split(',').map(Number);
+            query += ` AND CAST(REPLACE(coordenada_e, ',', '.') AS REAL) / 1000000 BETWEEN ? AND ?`;
+            query += ` AND CAST(REPLACE(coordenada_n, ',', '.') AS REAL) / 1000000 BETWEEN ? AND ?`;
+            params.push(west, east, south, north);
         }
 
-        query += ' ORDER BY codigo';
-        
+        // Filtro por tipo
+        if (tipo) {
+            query += ` AND tipo LIKE ?`;
+            params.push(`%${tipo}%`);
+        }
+
+        // Filtro por código
+        if (codigo) {
+            query += ` AND codigo LIKE ?`;
+            params.push(`%${codigo}%`);
+        }
+
+        // Filtro por localização
+        if (localizacao) {
+            query += ` AND localizacao LIKE ?`;
+            params.push(`%${localizacao}%`);
+        }
+
+        // Filtro por lote
+        if (lote) {
+            query += ` AND lote LIKE ?`;
+            params.push(`%${lote}%`);
+        }
+
+        // Filtro por método
+        if (metodo) {
+            query += ` AND metodo LIKE ?`;
+            params.push(`%${metodo}%`);
+        }
+
+        // Filtro por limites
+        if (limites) {
+            query += ` AND limites LIKE ?`;
+            params.push(`%${limites}%`);
+        }
+
+        // Filtro por UF
+        if (uf) {
+            query += ` AND uf = ?`;
+            params.push(uf);
+        }
+
+        // Filtro por status
+        if (status_campo) {
+            query += ` AND status_campo = ?`;
+            params.push(status_campo);
+        }
+
+        query += ` ORDER BY codigo LIMIT ? OFFSET ?`;
+        params.push(limite, offset);
+
         const stmt = db.prepare(query);
         const marcos = stmt.all(...params);
-        
-        res.json({ success: true, data: marcos, total: marcos.length });
+
+        // Contar total de registros (sem limite)
+        let countQuery = 'SELECT COUNT(*) as total FROM marcos WHERE ativo = ?';
+        const countParams = [ativo];
+        const countStmt = db.prepare(countQuery);
+        const totalResult = countStmt.get(...countParams);
+
+        // Retornar em formato GeoJSON (otimizado para mapas)
+        if (format === 'geojson') {
+            const geojson = {
+                type: 'FeatureCollection',
+                features: marcos
+                    .filter(m => m.latitude && m.longitude && !isNaN(m.latitude) && !isNaN(m.longitude))
+                    .map(m => ({
+                        type: 'Feature',
+                        id: m.id,
+                        geometry: {
+                            type: 'Point',
+                            coordinates: [m.longitude, m.latitude]
+                        },
+                        properties: {
+                            id: m.id,
+                            nome: m.nome,
+                            tipo: m.tipo,
+                            municipio: m.municipio,
+                            uf: m.uf,
+                            altitude: m.altitude,
+                            status: m.status
+                        }
+                    }))
+            };
+
+            return res.json({
+                success: true,
+                data: geojson,
+                count: geojson.features.length,
+                total: totalResult.total
+            });
+        }
+
+        // Retornar em formato JSON padrão
+        res.json({
+            success: true,
+            data: marcos,
+            count: marcos.length,
+            total: totalResult.total,
+            limite: limite,
+            offset: offset
+        });
     } catch (error) {
         console.error('Erro ao buscar marcos:', error);
         res.status(500).json({ success: false, message: error.message });
@@ -462,6 +590,177 @@ app.post('/api/importar', upload.single('file'), (req, res) => {
     } catch (error) {
         console.error('Erro ao importar:', error);
         res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// ==========================================
+// API: IMPORTAR MARCOS VIA PLANILHA
+// ==========================================
+app.post('/api/importar-marcos-planilha', upload.single('file'), (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({
+                success: false,
+                message: 'Nenhum arquivo enviado'
+            });
+        }
+
+        console.log('[Server] Importando planilha de marcos:', req.file.originalname);
+
+        const workbook = xlsx.readFile(req.file.path);
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const dados = xlsx.utils.sheet_to_json(worksheet);
+
+        let inseridos = 0;
+        let atualizados = 0;
+        let erros = [];
+        const marcos_validos = [];
+
+        // Processar cada linha da planilha
+        dados.forEach((row, index) => {
+            try {
+                const linha = index + 2; // +2 porque index é 0-based e primeira linha é cabeçalho
+
+                // Validar campos obrigatórios
+                if (!row.Nome || !row.Tipo) {
+                    erros.push({
+                        linha,
+                        erro: 'Nome e Tipo são obrigatórios',
+                        dados: row
+                    });
+                    return;
+                }
+
+                // Validar coordenadas se fornecidas
+                if (row.Latitude || row.Longitude) {
+                    const lat = parseFloat(row.Latitude);
+                    const lng = parseFloat(row.Longitude);
+
+                    if (isNaN(lat) || lat < -90 || lat > 90) {
+                        erros.push({
+                            linha,
+                            erro: 'Latitude inválida (deve estar entre -90 e 90)',
+                            dados: row
+                        });
+                        return;
+                    }
+
+                    if (isNaN(lng) || lng < -180 || lng > 180) {
+                        erros.push({
+                            linha,
+                            erro: 'Longitude inválida (deve estar entre -180 e 180)',
+                            dados: row
+                        });
+                        return;
+                    }
+                }
+
+                // Validar tipo de marco (deve ser um dos 6 tipos aceitos)
+                const tiposValidos = ['FHV-M', 'FHV-P', 'FHV-O', 'SAT', 'RN', 'RV'];
+                if (!tiposValidos.includes(row.Tipo)) {
+                    erros.push({
+                        linha,
+                        erro: `Tipo inválido. Deve ser um dos seguintes: ${tiposValidos.join(', ')}`,
+                        dados: row
+                    });
+                    return;
+                }
+
+                marcos_validos.push({
+                    ...row,
+                    linha
+                });
+
+            } catch (error) {
+                erros.push({
+                    linha: index + 2,
+                    erro: error.message,
+                    dados: row
+                });
+            }
+        });
+
+        // Inserir marcos válidos no banco
+        const stmt = db.prepare(`
+            INSERT INTO marcos (
+                codigo, tipo, localizacao, municipio,
+                latitude, longitude, altitude_h,
+                ano_implantacao, ativo, usuario_cadastro
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 'Importação Planilha')
+            ON CONFLICT(codigo) DO UPDATE SET
+                tipo = excluded.tipo,
+                localizacao = excluded.localizacao,
+                municipio = excluded.municipio,
+                latitude = excluded.latitude,
+                longitude = excluded.longitude,
+                altitude_h = excluded.altitude_h,
+                ano_implantacao = excluded.ano_implantacao
+        `);
+
+        // Verificar se cada marco já existe para contabilizar inserções vs atualizações
+        const checkStmt = db.prepare('SELECT id FROM marcos WHERE codigo = ?');
+
+        marcos_validos.forEach(marco => {
+            try {
+                const existe = checkStmt.get(marco.Nome);
+
+                stmt.run(
+                    marco.Nome,
+                    marco.Tipo,
+                    marco.Municipio || null,
+                    marco.Municipio || null, // usar municipio como localizacao também
+                    parseFloat(marco.Latitude) || null,
+                    parseFloat(marco.Longitude) || null,
+                    parseFloat(marco.Altitude) || null,
+                    marco.Ano_Implantacao || null
+                );
+
+                if (existe) {
+                    atualizados++;
+                } else {
+                    inseridos++;
+                }
+            } catch (error) {
+                erros.push({
+                    linha: marco.linha,
+                    erro: error.message,
+                    dados: marco
+                });
+            }
+        });
+
+        // Limpar arquivo temporário
+        fs.unlinkSync(req.file.path);
+
+        console.log(`[Server] Importação concluída: ${inseridos} inseridos, ${atualizados} atualizados, ${erros.length} erros`);
+
+        res.json({
+            success: true,
+            message: `Importação concluída! ${inseridos} marcos inseridos, ${atualizados} atualizados.`,
+            estatisticas: {
+                total_linhas: dados.length,
+                marcos_validos: marcos_validos.length,
+                inseridos,
+                atualizados,
+                erros: erros.length,
+                lista_erros: erros.slice(0, 5) // Limitar a 5 primeiros erros
+            }
+        });
+
+    } catch (error) {
+        console.error('[Server] Erro ao importar planilha:', error);
+
+        // Limpar arquivo temporário em caso de erro
+        if (req.file && req.file.path && fs.existsSync(req.file.path)) {
+            fs.unlinkSync(req.file.path);
+        }
+
+        res.status(500).json({
+            success: false,
+            message: 'Erro ao importar planilha',
+            error: error.message
+        });
     }
 });
 
@@ -1153,12 +1452,7 @@ app.post('/api/propriedades', (req, res) => {
             });
         }
 
-        if (!matricula) {
-            return res.status(400).json({
-                success: false,
-                message: 'Matrícula é obrigatória'
-            });
-        }
+        // Matrícula é opcional - pode ficar null para propriedades não regularizadas
 
         // Verificar se cliente existe
         const clienteExiste = db.prepare('SELECT id FROM clientes WHERE id = ?').get(cliente_id);
@@ -1169,13 +1463,15 @@ app.post('/api/propriedades', (req, res) => {
             });
         }
 
-        // Verificar se matrícula já existe
-        const matriculaExiste = db.prepare('SELECT id FROM propriedades WHERE matricula = ?').get(matricula);
-        if (matriculaExiste) {
-            return res.status(400).json({
-                success: false,
-                message: 'Matrícula já cadastrada'
-            });
+        // Verificar se matrícula já existe (somente se matrícula foi fornecida)
+        if (matricula) {
+            const matriculaExiste = db.prepare('SELECT id FROM propriedades WHERE matricula = ?').get(matricula);
+            if (matriculaExiste) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Matrícula já cadastrada'
+                });
+            }
         }
 
         // Inserir propriedade
@@ -1431,11 +1727,13 @@ app.post('/api/salvar-memorial-completo', (req, res) => {
             });
         }
 
+        // Matrícula é opcional - propriedades em regularização podem não ter
+        // Se não tiver matrícula, gerar um identificador temporário
         if (!propriedade.matricula) {
-            return res.status(400).json({
-                success: false,
-                message: 'Matrícula da propriedade é obrigatória'
-            });
+            const timestamp = Date.now();
+            const random = Math.floor(Math.random() * 1000);
+            propriedade.matricula = `TEMP-${timestamp}-${random}`;
+            console.log('[Server] Propriedade sem matrícula - gerando temporária:', propriedade.matricula);
         }
 
         // Executar tudo em uma transação

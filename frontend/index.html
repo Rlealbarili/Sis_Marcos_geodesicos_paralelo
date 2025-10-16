@@ -216,9 +216,12 @@
                         <div class="form-group">
                             <label>🏷️ Tipo:</label>
                             <select id="filtro-tipo-marco" onchange="buscarMarcosGeral()">
-                                <option value="">Todos</option>
+                                <option value="">Todos os tipos</option>
+                                <option value="FHV-M">FHV-M - Marco</option>
+                                <option value="FHV-P">FHV-P - Pilar</option>
+                                <option value="FHV-O">FHV-O - Outro</option>
                                 <option value="SAT">SAT - Satélite</option>
-                                <option value="RN">RN - Nivelamento</option>
+                                <option value="RN">RN - Rede de Nivelamento</option>
                                 <option value="RV">RV - Vértice</option>
                             </select>
                         </div>
@@ -480,6 +483,25 @@
     </div>
 
     <!-- Scripts -->
+    <!-- Supercluster -->
+    <script src="https://unpkg.com/supercluster@8.0.1/dist/supercluster.min.js"></script>
+
+    <!-- Utilitário de debounce -->
+    <script>
+    function debounce(func, wait) {
+      let timeout;
+      return function executedFunction(...args) {
+        const later = () => {
+          clearTimeout(timeout);
+          func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+      };
+    }
+    </script>
+
+    <script src="js/clustering.js"></script>
     <script src="script.js"></script>
 </body>
 </html>

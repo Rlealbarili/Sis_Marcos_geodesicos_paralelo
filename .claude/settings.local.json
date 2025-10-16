@@ -7,7 +7,11 @@
       "Bash(curl -s -X POST http://localhost:3000/api/propriedades -H \"Content-Type: application/json\" -d '{\"\"cliente_id\"\":1,\"\"nome_propriedade\"\":\"\"Propriedade Nova\"\",\"\"matricula\"\":\"\"MAT-2024-001\"\",\"\"tipo\"\":\"\"RURAL\"\",\"\"municipio\"\":\"\"Curitiba\"\",\"\"comarca\"\":\"\"Curitiba\"\",\"\"uf\"\":\"\"PR\"\",\"\"area_m2\"\":50000,\"\"perimetro_m\"\":900,\"\"observacoes\"\":\"\"Propriedade de teste criada via API\"\"}')",
       "Bash(curl:*)",
       "Bash(taskkill:*)",
-      "Bash(pkill:*)"
+      "Bash(pkill:*)",
+      "Bash(node --check:*)",
+      "Bash(node:*)",
+      "Bash(timeout 5 node:*)",
+      "Bash(npm install:*)"
     ],
     "deny": [],
     "ask": []

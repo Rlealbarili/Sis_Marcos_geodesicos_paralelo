@@ -1633,3 +1633,101 @@ tbody td {
         grid-template-columns: 1fr;
     }
 }
+
+/* ==========================================
+   BADGES PARA TIPOS DE MARCOS
+   ========================================== */
+.badge-fhv-m {
+    background: #e74c3c;
+}
+
+.badge-fhv-p {
+    background: #3498db;
+}
+
+.badge-fhv-o {
+    background: #2ecc71;
+}
+
+.badge-sat {
+    background: #9b59b6;
+}
+
+.badge-rn {
+    background: #f39c12;
+}
+
+.badge-rv {
+    background: #1abc9c;
+}
+
+/* ==========================================
+   ESTILOS PARA SUPERCLUSTER
+   ========================================== */
+
+/* Estilos para clusters do Supercluster */
+.marker-cluster {
+    background-clip: padding-box;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.marker-cluster div {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    color: #fff;
+    text-align: center;
+}
+
+.marker-cluster.cluster-small div {
+    background-color: rgba(51, 187, 214, 0.8);
+    border: 3px solid rgba(51, 187, 214, 1);
+}
+
+.marker-cluster.cluster-medium div {
+    background-color: rgba(241, 211, 87, 0.8);
+    border: 3px solid rgba(241, 211, 87, 1);
+}
+
+.marker-cluster.cluster-large div {
+    background-color: rgba(253, 156, 115, 0.8);
+    border: 3px solid rgba(253, 156, 115, 1);
+}
+
+.marco-popup {
+    font-family: Arial, sans-serif;
+}
+
+.marco-popup h3 {
+    margin: 0 0 10px 0;
+    color: #2c3e50;
+    font-size: 16px;
+}
+
+.marco-popup p {
+    margin: 5px 0;
+    font-size: 13px;
+    color: #555;
+}
+
+.marco-popup button {
+    margin-top: 10px;
+    padding: 6px 12px;
+    background-color: #3498db;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.marco-popup button:hover {
+    background-color: #2980b9;
+}

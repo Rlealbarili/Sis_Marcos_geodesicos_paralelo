@@ -13,8 +13,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // 1. Inicializar mapa
     inicializarMapa();
 
-    // 2. Atualizar estatísticas do header
-    atualizarEstatisticas();
+    // 2. Iniciar atualização automática das estatísticas (a cada 30s)
+    iniciarAtualizacaoAutomatica();
 
     // 3. Carregar clientes para filtros
     carregarClientesParaFiltros();
@@ -521,6 +521,7 @@ let marcosLayer = null;
 let poligonosLayer = null;
 let marcadores = [];
 let todosMarcos = [];
+let clusterManager = null; // Gerenciador de Supercluster
 let poligonoEmCriacao = null;
 let pontosPoligono = [];
 
@@ -584,35 +585,63 @@ function inicializarMapa() {
         return;
     }
 
-    // Evitar reinicialização
-    if (map) {
-        console.log('Mapa já inicializado');
-        return;
+    try {
+        // Criar mapa centrado no Brasil (Paraná)
+        map = L.map('map', {
+            center: [-25.4284, -49.2733],
+            zoom: 7,
+            preferCanvas: true, // Usar Canvas em vez de SVG (mais rápido)
+            zoomControl: true
+        });
+
+        // Adicionar tile layer
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap',
+            maxZoom: 18
+        }).addTo(map);
+
+        console.log('✅ Mapa criado');
+
+        // Inicializar ClusterManager (Supercluster)
+        if (typeof ClusterManager !== 'undefined') {
+            clusterManager = new ClusterManager(map);
+            console.log('✅ ClusterManager (Supercluster) inicializado');
+
+            // Adicionar event listeners para atualizar clusters
+            map.on('moveend', () => {
+                if (clusterManager) {
+                    clusterManager.updateClusters();
+                }
+            });
+
+            map.on('zoomend', () => {
+                if (clusterManager) {
+                    clusterManager.updateClusters();
+                }
+            });
+        } else {
+            console.warn('⚠️ ClusterManager não disponível - verifique se clustering.js foi carregado');
+        }
+
+        // Carregar dados de forma ASSÍNCRONA e SEQUENCIAL
+        setTimeout(() => {
+            console.log('Carregando marcos (limitado)...');
+            carregarMarcos();
+        }, 500);
+
+        setTimeout(() => {
+            console.log('Carregando propriedades...');
+            carregarPropriedades();
+        }, 1500);
+
+        setTimeout(() => {
+            console.log('Criando controle de camadas...');
+            criarControleCamadas();
+        }, 2500);
+
+    } catch (error) {
+        console.error('❌ Erro ao criar mapa:', error);
     }
-
-    definirProjecao();
-
-    // Criar mapa centrado no Brasil (aproximadamente Paraná)
-    map = L.map('map').setView([-25.4284, -49.2733], 7);
-
-    // Adicionar tile layer (OpenStreetMap)
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap contributors',
-        maxZoom: 19
-    }).addTo(map);
-
-    console.log('✅ Mapa criado com sucesso');
-
-    // Carregar dados
-    Promise.all([
-        carregarMarcos(),
-        carregarPropriedades()
-    ]).then(() => {
-        console.log('✅ Dados carregados no mapa!');
-        criarControleCamadas();
-    }).catch(error => {
-        console.error('❌ Erro ao carregar dados:', error);
-    });
 }
 
 function utmParaLatLng(e, n) {
@@ -796,11 +825,19 @@ async function carregarPropriedades() {
             throw new Error(result.message);
         }
 
+        console.log(`✅ ${result.total} propriedades encontradas`);
+
+        if (result.total === 0) {
+            console.log('⚠️ Nenhuma propriedade cadastrada ainda');
+            return;
+        }
+
         propriedadesData = result;
-        console.log(`✅ ${result.total} propriedades carregadas`);
 
         // Criar camadas por tipo
         criarCamadasPropriedades(result.features);
+
+        console.log('✅ Camadas de propriedades criadas no mapa');
 
     } catch (error) {
         console.error('❌ Erro ao carregar propriedades:', error);
@@ -874,8 +911,7 @@ function adicionarInteracoesPoligono(feature, layer) {
             </div>
 
             <div style="background: #ecf0f1; padding: 8px; border-radius: 4px; margin-bottom: 8px;">
-                <strong>📐 Área:</strong> ${props.area_m2 ? props.area_m2.toLocaleString('pt-BR') + ' m²' : 'N/A'}
-                ${props.area_hectares ? ` (${props.area_hectares.toFixed(2)} ha)` : ''}<br>
+                <strong>📐 Área:</strong> ${formatarArea(props.area_m2, props.tipo)}<br>
                 <strong>📏 Perímetro:</strong> ${props.perimetro_m ? props.perimetro_m.toLocaleString('pt-BR') + ' m' : 'N/A'}<br>
                 <strong>🔺 Vértices:</strong> ${props.total_vertices}
             </div>
@@ -931,11 +967,161 @@ function getCorTipo(tipo) {
     return cores[tipo] || '#95a5a6';
 }
 
+/**
+ * Formata área de acordo com o tipo de propriedade
+ * @param {number} area_m2 - Área em metros quadrados
+ * @param {string} tipo - Tipo da propriedade (RURAL, URBANO, LOTEAMENTO)
+ * @returns {string} Área formatada
+ */
+function formatarArea(area_m2, tipo) {
+    if (!area_m2 || area_m2 <= 0) {
+        return 'N/A';
+    }
+
+    // Para propriedades RURAIS, mostrar hectares como unidade principal
+    if (tipo === 'RURAL') {
+        const hectares = (area_m2 / 10000).toFixed(2);
+        const m2Formatado = area_m2.toLocaleString('pt-BR', { maximumFractionDigits: 2 });
+        return `${hectares} ha (${m2Formatado} m²)`;
+    }
+
+    // Para URBANO e LOTEAMENTO, mostrar apenas m²
+    const m2Formatado = area_m2.toLocaleString('pt-BR', { maximumFractionDigits: 2 });
+    return `${m2Formatado} m²`;
+}
+
 function verDetalhesPropriedade(propriedadeId) {
     // Redirecionar para página de detalhes (criar futuramente)
     // Por enquanto, apenas log
     console.log('Ver detalhes da propriedade:', propriedadeId);
     alert(`Funcionalidade em desenvolvimento.\nPropriedade ID: ${propriedadeId}`);
+}
+
+/**
+ * Abre um modal específico
+ * @param {string} modalId - ID do modal a ser aberto
+ */
+function abrirModal(modalId) {
+    const modal = document.getElementById(modalId);
+    if (modal) {
+        modal.style.display = 'block';
+        modal.classList.add('active');
+    } else {
+        console.error(`Modal com ID "${modalId}" não encontrado`);
+    }
+}
+
+/**
+ * Fecha um modal específico
+ * @param {string} modalId - ID do modal a ser fechado
+ */
+function fecharModal(modalId) {
+    const modal = document.getElementById(modalId);
+    if (modal) {
+        modal.style.display = 'none';
+        modal.classList.remove('active');
+    }
+}
+
+/**
+ * Abre o modal de edição de propriedade com os dados carregados
+ * @param {number} propriedadeId - ID da propriedade a ser editada
+ */
+async function editarPropriedade(propriedadeId) {
+    try {
+        console.log('Carregando propriedade para edição:', propriedadeId);
+
+        // Buscar dados da propriedade
+        const response = await fetch(`/api/propriedades/${propriedadeId}`);
+        const result = await response.json();
+
+        if (!result.success) {
+            throw new Error(result.message);
+        }
+
+        const prop = result.data;
+
+        // Alterar título do modal
+        document.getElementById('modal-propriedade-titulo').textContent = '✏️ Editar Propriedade';
+
+        // Preencher campos do formulário
+        document.getElementById('propriedade-id').value = prop.id;
+        document.getElementById('modal-propriedade-nome').value = prop.nome_propriedade || '';
+        document.getElementById('modal-propriedade-matricula').value = prop.matricula || '';
+        document.getElementById('modal-propriedade-tipo').value = prop.tipo || 'RURAL';
+        document.getElementById('modal-propriedade-municipio').value = prop.municipio || '';
+        document.getElementById('modal-propriedade-uf').value = prop.uf || '';
+        document.getElementById('modal-propriedade-area').value = prop.area_m2 || '';
+        document.getElementById('modal-propriedade-perimetro').value = prop.perimetro_m || '';
+        document.getElementById('modal-propriedade-observacoes').value = prop.observacoes || '';
+
+        // Carregar clientes e selecionar o cliente atual
+        await carregarClientesParaSelect();
+        document.getElementById('modal-propriedade-cliente').value = prop.cliente_id;
+
+        // Abrir modal
+        abrirModal('modal-propriedade');
+
+    } catch (error) {
+        console.error('Erro ao carregar propriedade:', error);
+        alert(`❌ Erro ao carregar propriedade: ${error.message}`);
+    }
+}
+
+/**
+ * Centraliza o mapa na propriedade e destaca seu polígono
+ * @param {number} propriedadeId - ID da propriedade a ser exibida no mapa
+ */
+function verPropriedadeNoMapa(propriedadeId) {
+    console.log('Navegando para propriedade no mapa:', propriedadeId);
+
+    // Mudar para aba do mapa
+    trocarAba('mapa');
+
+    // Aguardar um momento para o mapa carregar
+    setTimeout(() => {
+        // Procurar a propriedade nas camadas do mapa
+        let propriedadeEncontrada = false;
+
+        // Verificar todas as camadas de propriedades
+        const camadas = [propriedadesRuraisLayer, propriedadesUrbanasLayer, propriedadesLoteamentoLayer];
+
+        camadas.forEach(camada => {
+            if (!camada) return;
+
+            camada.eachLayer(layer => {
+                if (layer.feature && layer.feature.id === propriedadeId) {
+                    propriedadeEncontrada = true;
+
+                    // Centralizar mapa na propriedade
+                    map.fitBounds(layer.getBounds(), {
+                        padding: [50, 50],
+                        maxZoom: 16
+                    });
+
+                    // Destacar temporariamente a propriedade
+                    layer.setStyle({
+                        color: '#ff0000',
+                        weight: 4,
+                        fillOpacity: 0.3
+                    });
+
+                    // Abrir popup
+                    layer.openPopup();
+
+                    // Voltar ao estilo normal após 3 segundos
+                    setTimeout(() => {
+                        camada.resetStyle(layer);
+                    }, 3000);
+                }
+            });
+        });
+
+        if (!propriedadeEncontrada) {
+            console.warn('Propriedade não encontrada no mapa:', propriedadeId);
+            alert('⚠️ Propriedade não encontrada no mapa. Verifique se possui vértices cadastrados.');
+        }
+    }, 500);
 }
 
 // ==========================================
@@ -2018,29 +2204,8 @@ function trocarAba(nomeAba) {
 // ==========================================
 // ESTATÍSTICAS DO HEADER
 // ==========================================
-
-async function atualizarEstatisticas() {
-    try {
-        // Contar marcos (já temos esse valor)
-        document.getElementById('stat-marcos').textContent = '📍 Marcos: 19.040';
-
-        // Contar propriedades
-        const resProp = await fetch('/api/propriedades?limite=1');
-        const dataProp = await resProp.json();
-        if (dataProp.success) {
-            document.getElementById('stat-propriedades').textContent = `🏘️ Propriedades: ${dataProp.total}`;
-        }
-
-        // Contar clientes
-        const resCliente = await fetch('/api/clientes?limite=1');
-        const dataCliente = await resCliente.json();
-        if (dataCliente.success) {
-            document.getElementById('stat-clientes').textContent = `👥 Clientes: ${dataCliente.total}`;
-        }
-    } catch (error) {
-        console.error('Erro ao atualizar estatísticas:', error);
-    }
-}
+// Função atualizarEstatisticas() movida para o final do arquivo
+// com suporte para atualização automática a cada 30 segundos
 
 // ==========================================
 // GESTÃO DE CLIENTES
@@ -2351,7 +2516,7 @@ function renderizarListaPropriedades(propriedades) {
                     <div><strong>📋 Matrícula:</strong> ${prop.matricula}</div>
                     <div><strong>👤 Proprietário:</strong> ${prop.cliente_nome}</div>
                     ${prop.municipio ? `<div><strong>📍 Município:</strong> ${prop.municipio} - ${prop.uf || ''}</div>` : ''}
-                    ${prop.area_m2 ? `<div><strong>📐 Área:</strong> ${prop.area_m2.toLocaleString('pt-BR')} m² (${(prop.area_m2/10000).toFixed(2)} ha)</div>` : ''}
+                    <div><strong>📐 Área:</strong> ${formatarArea(prop.area_m2, prop.tipo)}</div>
                     <div><strong>🔺 Vértices:</strong> ${prop.total_vertices || 0}</div>
                 </div>
             </div>
@@ -2657,9 +2822,10 @@ async function processarMemorial() {
 
         console.log('Memorial processado:', result);
 
-        // Redirecionar para página de importação
+        // Exibir formulário de confirmação na mesma página
         setTimeout(() => {
-            window.open('/importar-memorial.html', '_blank');
+            document.getElementById('progresso-importacao').style.display = 'none';
+            exibirFormularioConfirmacaoNaAba(result);
         }, 1000);
 
     } catch (error) {
@@ -2670,6 +2836,361 @@ async function processarMemorial() {
             progressFill.style.background = '#e74c3c';
         }
         if (btnProcessar) btnProcessar.disabled = false;
+    }
+}
+
+function exibirFormularioConfirmacaoNaAba(dadosExtraidos) {
+    console.log('Exibindo formulário de confirmação...', dadosExtraidos);
+
+    // Armazenar dados extraídos
+    window.dadosMemorialExtraidos = dadosExtraidos;
+
+    // Ocultar resultado anterior
+    const resultadoDiv = document.getElementById('resultado-extracao');
+    if (resultadoDiv) resultadoDiv.style.display = 'none';
+
+    // Exibir formulário de confirmação
+    const formularioDiv = document.getElementById('formulario-confirmacao-memorial');
+    if (!formularioDiv) {
+        console.error('Div formulario-confirmacao-memorial não encontrada');
+        return;
+    }
+
+    formularioDiv.style.display = 'block';
+
+    // Preencher informações do memorial
+    const metadata = dadosExtraidos.data.metadata;
+    const vertices = dadosExtraidos.data.vertices;
+    const stats = dadosExtraidos.data.estatisticas;
+
+    // Criar HTML do formulário
+    formularioDiv.innerHTML = `
+        <h2>📝 Confirmar Dados do Memorial</h2>
+
+        <div class="info-card">
+            <strong>✅ Extração concluída com sucesso!</strong><br>
+            <span>📄 Arquivo: ${dadosExtraidos.arquivo_nome || 'memorial.docx'}</span><br>
+            <span>📍 Vértices extraídos: ${stats.vertices_unicos}</span><br>
+            ${metadata.area ? `<span>📐 Área: ${metadata.area.toLocaleString('pt-BR')} m² (${(metadata.area / 10000).toFixed(2)} ha)</span>` : ''}
+        </div>
+
+        <h3>👤 Cliente (Proprietário)</h3>
+        <div class="radio-group">
+            <label>
+                <input type="radio" name="tipo-cliente-aba" value="existente" checked onchange="alternarTipoClienteAba()">
+                Usar cliente existente
+            </label>
+            <label>
+                <input type="radio" name="tipo-cliente-aba" value="novo" onchange="alternarTipoClienteAba()">
+                Criar novo cliente
+            </label>
+        </div>
+
+        <div id="cliente-existente-campos-aba" style="display: block;">
+            <div class="form-group">
+                <label>Selecione o cliente:</label>
+                <select id="select-cliente-aba">
+                    <option value="">Carregando clientes...</option>
+                </select>
+            </div>
+        </div>
+
+        <div id="cliente-novo-campos-aba" style="display: none;">
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Nome completo: *</label>
+                    <input type="text" id="cliente-nome-aba" value="${metadata.proprietarios?.[0] || ''}">
+                </div>
+                <div class="form-group">
+                    <label>CPF/CNPJ:</label>
+                    <input type="text" id="cliente-cpf-aba">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Telefone:</label>
+                    <input type="text" id="cliente-telefone-aba">
+                </div>
+                <div class="form-group">
+                    <label>Email:</label>
+                    <input type="email" id="cliente-email-aba">
+                </div>
+            </div>
+        </div>
+
+        <h3>🏘️ Propriedade</h3>
+        <div class="form-row">
+            <div class="form-group">
+                <label>Nome da propriedade:</label>
+                <input type="text" id="prop-nome-aba" value="${metadata.imovel || ''}">
+            </div>
+            <div class="form-group">
+                <label>Matrícula:</label>
+                <input type="text" id="prop-matricula-aba" value="${metadata.matricula || ''}" placeholder="Deixe vazio se ainda não tem">
+                <small style="color: #7f8c8d;">Pode ficar vazio se ainda não foi regularizada</small>
+            </div>
+        </div>
+        <div class="form-row-3">
+            <div class="form-group">
+                <label>Município:</label>
+                <input type="text" id="prop-municipio-aba" value="${metadata.municipio || ''}">
+            </div>
+            <div class="form-group">
+                <label>Tipo:</label>
+                <select id="prop-tipo-aba">
+                    <option value="RURAL">Rural</option>
+                    <option value="URBANO">Urbano</option>
+                    <option value="LOTEAMENTO">Loteamento</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>UF:</label>
+                <input type="text" id="prop-uf-aba" value="${metadata.uf || 'PR'}" maxlength="2">
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label>Área (m²):</label>
+                <input type="number" id="prop-area-aba" value="${metadata.area || ''}" step="0.01" readonly>
+            </div>
+            <div class="form-group">
+                <label>Perímetro (m):</label>
+                <input type="number" id="prop-perimetro-aba" value="${metadata.perimetro || ''}" step="0.01" readonly>
+            </div>
+        </div>
+
+        <h3>📍 Vértices Extraídos (${vertices.length})</h3>
+        <div class="vertices-tabela-container" style="max-height: 300px; overflow-y: auto;">
+            <table class="vertices-tabela">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Nome</th>
+                        <th>UTM E</th>
+                        <th>UTM N</th>
+                        <th>Latitude</th>
+                        <th>Longitude</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${vertices.map((v, i) => `
+                        <tr>
+                            <td>${i + 1}</td>
+                            <td>${v.nome}</td>
+                            <td>${v.coordenadas.e?.toFixed(2) || '-'}</td>
+                            <td>${v.coordenadas.n?.toFixed(2) || '-'}</td>
+                            <td>${v.coordenadas.lat_original?.toFixed(6) || '-'}</td>
+                            <td>${v.coordenadas.lon_original?.toFixed(6) || '-'}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="botoes-confirmacao">
+            <button class="btn btn-primary" onclick="salvarMemorialCompletoAba()">
+                ✅ Salvar Memorial Completo
+            </button>
+            <button class="btn btn-secondary" onclick="cancelarImportacaoAba()">
+                ❌ Cancelar
+            </button>
+        </div>
+
+        <div id="mensagem-final-aba"></div>
+    `;
+
+    // Carregar clientes no select
+    carregarClientesParaSelectAba();
+
+    // Scroll até o formulário
+    formularioDiv.scrollIntoView({ behavior: 'smooth' });
+}
+
+function alternarTipoClienteAba() {
+    const tipoSelecionado = document.querySelector('input[name="tipo-cliente-aba"]:checked')?.value;
+    const camposExistente = document.getElementById('cliente-existente-campos-aba');
+    const camposNovo = document.getElementById('cliente-novo-campos-aba');
+
+    if (tipoSelecionado === 'existente') {
+        camposExistente.style.display = 'block';
+        camposNovo.style.display = 'none';
+    } else {
+        camposExistente.style.display = 'none';
+        camposNovo.style.display = 'block';
+    }
+}
+
+async function carregarClientesParaSelectAba() {
+    try {
+        const response = await fetch('/api/clientes?limite=1000');
+        const result = await response.json();
+
+        const select = document.getElementById('select-cliente-aba');
+        if (!select) return;
+
+        select.innerHTML = '<option value="">Selecione um cliente...</option>';
+
+        if (result.success && result.data.length > 0) {
+            result.data.forEach(cliente => {
+                const option = document.createElement('option');
+                option.value = cliente.id;
+                option.textContent = `${cliente.nome}${cliente.cpf_cnpj ? ' - ' + cliente.cpf_cnpj : ''}`;
+                select.appendChild(option);
+            });
+        }
+    } catch (error) {
+        console.error('Erro ao carregar clientes:', error);
+    }
+}
+
+async function salvarMemorialCompletoAba() {
+    const btnSalvar = event.target;
+    const mensagemDiv = document.getElementById('mensagem-final-aba');
+
+    try {
+        btnSalvar.disabled = true;
+        btnSalvar.innerHTML = '<span class="loading"></span> Salvando...';
+        mensagemDiv.innerHTML = '';
+
+        // Coletar dados do cliente
+        const tipoCliente = document.querySelector('input[name="tipo-cliente-aba"]:checked').value;
+        let clienteData;
+
+        if (tipoCliente === 'existente') {
+            const clienteId = document.getElementById('select-cliente-aba').value;
+            if (!clienteId) {
+                throw new Error('Selecione um cliente');
+            }
+            clienteData = {
+                novo: false,
+                id: parseInt(clienteId)
+            };
+        } else {
+            const nome = document.getElementById('cliente-nome-aba').value.trim();
+            if (!nome) {
+                throw new Error('Nome do cliente é obrigatório');
+            }
+
+            clienteData = {
+                novo: true,
+                nome: nome,
+                cpf_cnpj: document.getElementById('cliente-cpf-aba').value.trim() || null,
+                telefone: document.getElementById('cliente-telefone-aba').value.trim() || null,
+                email: document.getElementById('cliente-email-aba').value.trim() || null
+            };
+        }
+
+        // Coletar dados da propriedade
+        const nomePropriedade = document.getElementById('prop-nome-aba').value.trim();
+        const matricula = document.getElementById('prop-matricula-aba').value.trim();
+
+        // MATRÍCULA AGORA É OPCIONAL!
+        const propriedadeData = {
+            nome_propriedade: nomePropriedade || 'Sem nome',
+            matricula: matricula || null, // Pode ser null
+            tipo: document.getElementById('prop-tipo-aba').value,
+            municipio: document.getElementById('prop-municipio-aba').value.trim() || null,
+            uf: document.getElementById('prop-uf-aba').value.trim() || null,
+            area_m2: parseFloat(document.getElementById('prop-area-aba').value) || null,
+            perimetro_m: parseFloat(document.getElementById('prop-perimetro-aba').value) || null
+        };
+
+        // Preparar vértices
+        const dadosExtraidos = window.dadosMemorialExtraidos;
+        const vertices = dadosExtraidos.data.vertices.map((v, index) => ({
+            nome: v.nome,
+            ordem: index + 1,
+            coordenadas: {
+                tipo: v.coordenadas.tipo,
+                e: v.coordenadas.e,
+                n: v.coordenadas.n,
+                lat_original: v.coordenadas.lat_original,
+                lon_original: v.coordenadas.lon_original,
+                utm_zona: v.coordenadas.utm_zona || '22S',
+                datum: v.coordenadas.datum || 'SIRGAS2000'
+            }
+        }));
+
+        // Preparar memorial
+        const memorial = {
+            arquivo_nome: dadosExtraidos.arquivo_nome || 'memorial.docx',
+            estatisticas: dadosExtraidos.data.estatisticas
+        };
+
+        // Montar payload
+        const payload = {
+            cliente: clienteData,
+            propriedade: propriedadeData,
+            vertices: vertices,
+            memorial: memorial
+        };
+
+        console.log('Salvando memorial:', payload);
+
+        // Enviar para API
+        const response = await fetch('/api/salvar-memorial-completo', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            mensagemDiv.innerHTML = `
+                <div class="mensagem mensagem-sucesso">
+                    <strong>✅ ${result.message}</strong><br><br>
+                    <strong>Cliente ID:</strong> ${result.data.cliente_id}<br>
+                    <strong>Propriedade ID:</strong> ${result.data.propriedade_id}<br>
+                    <strong>Vértices criados:</strong> ${result.data.vertices_criados}<br>
+                    ${!matricula ? '<br><span style="background: #f39c12; color: white; padding: 5px 10px; border-radius: 5px;">⚠️ Propriedade SEM MATRÍCULA - Aguardando regularização</span>' : ''}
+                </div>
+            `;
+
+            btnSalvar.innerHTML = '✅ Salvo com Sucesso!';
+            btnSalvar.style.background = '#27ae60';
+
+            // Atualizar dashboard
+            atualizarEstatisticas();
+
+            // Recarregar propriedades no mapa
+            setTimeout(() => {
+                carregarPropriedades();
+            }, 1000);
+
+            // Limpar após 3 segundos
+            setTimeout(() => {
+                document.getElementById('formulario-confirmacao-memorial').style.display = 'none';
+                document.getElementById('arquivo-memorial').value = '';
+                document.getElementById('nome-arquivo-selecionado').textContent = '';
+                document.getElementById('btn-processar').disabled = true;
+            }, 3000);
+
+        } else {
+            throw new Error(result.message || 'Erro ao salvar memorial');
+        }
+
+    } catch (error) {
+        console.error('Erro ao salvar memorial:', error);
+        mensagemDiv.innerHTML = `
+            <div class="mensagem mensagem-erro">
+                <strong>❌ Erro ao salvar memorial</strong><br>
+                ${error.message}
+            </div>
+        `;
+
+        btnSalvar.disabled = false;
+        btnSalvar.innerHTML = '✅ Salvar Memorial Completo';
+    }
+}
+
+function cancelarImportacaoAba() {
+    if (confirm('Deseja realmente cancelar? Os dados extraídos serão perdidos.')) {
+        document.getElementById('formulario-confirmacao-memorial').style.display = 'none';
+        document.getElementById('arquivo-memorial').value = '';
+        document.getElementById('nome-arquivo-selecionado').textContent = '';
+        document.getElementById('btn-processar').disabled = true;
+        window.dadosMemorialExtraidos = null;
     }
 }
 
@@ -2734,114 +3255,310 @@ console.log('✅ Funções JavaScript faltantes adicionadas com sucesso!');
 
 async function carregarMarcos() {
     try {
-        console.log('Carregando marcos geodésicos...');
+        console.log('🔄 Carregando TODOS os marcos geodésicos (Supercluster ativado)...');
 
-        const response = await fetch('/api/marcos?limite=20000');
+        // AGORA PODEMOS CARREGAR TODOS OS MARCOS! Supercluster aguenta 19k+ sem problemas
+        const response = await fetch('/api/marcos');
         const result = await response.json();
 
         if (!result.success) {
             throw new Error(result.message);
         }
 
-        console.log(`✅ ${result.data.length} marcos carregados`);
+        console.log(`✅ ${result.data.length} marcos carregados da API`);
 
-        // Criar layer de marcos
+        // Criar layer de marcos usando Supercluster
         criarLayerMarcos(result.data);
 
     } catch (error) {
         console.error('❌ Erro ao carregar marcos:', error);
+        alert('Erro ao carregar marcos: ' + error.message);
     }
 }
 
 function criarLayerMarcos(marcos) {
+    console.log(`🎯 Carregando ${marcos.length} marcos no Supercluster...`);
+
+    // Se não tiver ClusterManager, avisar e usar método antigo (fallback)
+    if (!clusterManager) {
+        console.error('❌ ClusterManager não inicializado! Usando método legado...');
+        criarLayerMarcosLegado(marcos);
+        return;
+    }
+
+    try {
+        console.time('⏱️  Conversão para GeoJSON');
+
+        // Filtrar e converter marcos para GeoJSON
+        const features = [];
+        let marcosIgnorados = 0;
+
+        marcos.forEach(marco => {
+            // Converter coordenadas UTM para Lat/Lng se necessário
+            let lat, lng;
+
+            if (marco.coordenada_e && marco.coordenada_n) {
+                const coords = utmParaLatLng(marco.coordenada_e, marco.coordenada_n);
+                if (coords) {
+                    lat = coords.lat;
+                    lng = coords.lng;
+                }
+            } else if (marco.latitude && marco.longitude) {
+                lat = parseFloat(marco.latitude);
+                lng = parseFloat(marco.longitude);
+            }
+
+            // Validar coordenadas
+            if (!lat || !lng || isNaN(lat) || isNaN(lng) ||
+                lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+                marcosIgnorados++;
+                return;
+            }
+
+            // Criar feature GeoJSON
+            features.push({
+                type: 'Feature',
+                geometry: {
+                    type: 'Point',
+                    coordinates: [lng, lat] // GeoJSON usa [lng, lat]
+                },
+                properties: {
+                    id: marco.id,
+                    codigo: marco.codigo || marco.nome || 'Marco',
+                    nome: marco.nome || marco.codigo || 'N/A',
+                    tipo: marco.tipo || 'N/A',
+                    municipio: marco.municipio || marco.localizacao || 'N/A',
+                    uf: marco.uf || '',
+                    altitude: marco.altitude_h || marco.altitude || null,
+                    lote: marco.lote || null,
+                    localizacao: marco.localizacao || ''
+                }
+            });
+        });
+
+        console.timeEnd('⏱️  Conversão para GeoJSON');
+
+        if (marcosIgnorados > 0) {
+            console.warn(`⚠️ ${marcosIgnorados} marcos ignorados (coordenadas inválidas)`);
+        }
+
+        console.log(`✅ ${features.length} marcos válidos convertidos para GeoJSON`);
+
+        // Criar objeto GeoJSON
+        const geojson = {
+            type: 'FeatureCollection',
+            features: features
+        };
+
+        // Carregar no ClusterManager
+        console.time('⏱️  Supercluster.load');
+        clusterManager.loadData(geojson);
+        console.timeEnd('⏱️  Supercluster.load');
+
+        console.log(`✅ ${features.length} marcos carregados no Supercluster com sucesso!`);
+
+        // Exibir estatísticas
+        const stats = clusterManager.getStats();
+        if (stats) {
+            console.log(`📊 Estatísticas: ${stats.totalPoints} pontos totais, ${stats.visibleClusters} clusters visíveis, ${stats.visiblePoints} pontos individuais visíveis`);
+        }
+
+    } catch (error) {
+        console.error('❌ Erro ao carregar marcos no Supercluster:', error);
+        showToast('Erro ao carregar marcos no mapa', 'error');
+    }
+}
+
+// Função legado (fallback caso Supercluster não esteja disponível)
+function criarLayerMarcosLegado(marcos) {
+    console.log(`⚠️ MODO LEGADO: Limitando a 2000 marcos`);
+
     // Remover layer anterior se existir
-    if (marcosLayer) {
+    if (marcosLayer && map) {
         map.removeLayer(marcosLayer);
     }
 
-    // Cores por tipo de marco
+    // Limitar marcos
+    const LIMITE_MARCOS = 2000;
+    if (marcos.length > LIMITE_MARCOS) {
+        marcos = marcos.slice(0, LIMITE_MARCOS);
+    }
+
+    // Cores por tipo
     const coresPorTipo = {
-        'SAT': '#e74c3c',      // Vermelho - Satélite
-        'RN': '#3498db',       // Azul - Rede Nivelamento
-        'RV': '#2ecc71',       // Verde - Vértice
-        'default': '#95a5a6'   // Cinza - Outros
+        'FHV-M': '#e74c3c',
+        'FHV-P': '#3498db',
+        'FHV-O': '#2ecc71',
+        'SAT': '#9b59b6',
+        'RN': '#f39c12',
+        'RV': '#1abc9c',
+        'default': '#95a5a6'
     };
 
-    // Criar markers com coordenadas UTM
-    const markers = marcos
-        .filter(marco => marco.coordenada_e && marco.coordenada_n)
-        .map(marco => {
-            // Converter UTM para LatLng
+    // Filtrar marcos válidos
+    const marcosValidos = marcos.filter(marco => {
+        if (marco.coordenada_e && marco.coordenada_n) {
             const coords = utmParaLatLng(marco.coordenada_e, marco.coordenada_n);
-            if (!coords) return null;
+            if (coords) {
+                marco.latitude = coords.lat;
+                marco.longitude = coords.lng;
+                return true;
+            }
+        }
+        if (marco.latitude && marco.longitude &&
+            !isNaN(marco.latitude) && !isNaN(marco.longitude)) {
+            return true;
+        }
+        return false;
+    });
 
-            const cor = coresPorTipo[marco.tipo] || coresPorTipo.default;
+    // Criar markers simples
+    const markers = marcosValidos.map(marco => {
+        const cor = coresPorTipo[marco.tipo] || coresPorTipo.default;
+        const icon = L.divIcon({
+            className: 'marco-icon',
+            html: `<div style="background-color: ${cor}; width: 8px; height: 8px; border-radius: 50%; border: 1px solid white;"></div>`,
+            iconSize: [8, 8]
+        });
 
-            const icon = L.divIcon({
-                className: 'marco-icon',
-                html: `<div style="background-color: ${cor}; width: 10px; height: 10px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 4px rgba(0,0,0,0.5);"></div>`,
-                iconSize: [10, 10]
-            });
+        const marker = L.marker([marco.latitude, marco.longitude], { icon: icon });
+        marker.bindPopup(`
+            <h4>${marco.codigo || marco.nome || 'Marco'}</h4>
+            <strong>Tipo:</strong> ${marco.tipo}<br>
+            <strong>Local:</strong> ${marco.municipio || 'N/A'}
+        `);
+        return marker;
+    });
 
-            const marker = L.marker([coords.lat, coords.lng], { icon: icon });
-
-            // Popup com informações
-            marker.bindPopup(`
-                <div style="min-width: 200px;">
-                    <h3 style="margin: 0 0 10px 0; color: #2c3e50;">${marco.codigo}</h3>
-                    <strong>🏷️ Tipo:</strong> ${marco.tipo}<br>
-                    <strong>📍 Localização:</strong> ${marco.localizacao || 'N/A'}<br>
-                    <strong>🗺️ Lote:</strong> ${marco.lote || 'N/A'}<br>
-                    <strong>📏 Coordenadas UTM:</strong><br>
-                    E: ${parseFloat(marco.coordenada_e).toFixed(2)}m<br>
-                    N: ${parseFloat(marco.coordenada_n).toFixed(2)}m<br>
-                    <strong>🌐 Lat/Lng:</strong><br>
-                    Lat: ${coords.lat.toFixed(6)}°<br>
-                    Lon: ${coords.lng.toFixed(6)}°
-                </div>
-            `);
-
-            return marker;
-        })
-        .filter(marker => marker !== null);
-
-    // Criar layer group
     marcosLayer = L.layerGroup(markers);
-    marcosLayer.addTo(map);
+    if (map) {
+        marcosLayer.addTo(map);
+        console.log(`✅ ${markers.length} marcos adicionados (modo legado)`);
+    }
+}
 
-    console.log(`✅ ${markers.length} marcos adicionados ao mapa`);
+// Função auxiliar para criar marker de marco
+function criarMarkerMarco(marco, coresPorTipo) {
+    const cor = coresPorTipo[marco.tipo] || coresPorTipo.default;
+
+    const icon = L.divIcon({
+        className: 'marco-icon',
+        html: `<div style="background-color: ${cor}; width: 10px; height: 10px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 4px rgba(0,0,0,0.5);"></div>`,
+        iconSize: [10, 10]
+    });
+
+    const marker = L.marker([marco.latitude, marco.longitude], { icon: icon });
+
+    // Popup otimizado (só cria quando abre)
+    marker.bindPopup(() => {
+        return `
+            <div style="min-width: 200px;">
+                <h3 style="margin: 0 0 10px 0; color: #2c3e50;">${marco.codigo || marco.nome || 'Marco'}</h3>
+                <strong>🏷️ Tipo:</strong> ${marco.tipo}<br>
+                <strong>📍 Localização:</strong> ${marco.localizacao || marco.municipio || 'N/A'}<br>
+                ${marco.lote ? `<strong>🗺️ Lote:</strong> ${marco.lote}<br>` : ''}
+                ${marco.altitude ? `<strong>📊 Altitude:</strong> ${marco.altitude}m<br>` : ''}
+                ${marco.ano_implantacao ? `<strong>🗓️ Implantação:</strong> ${marco.ano_implantacao}<br>` : ''}
+                <strong>📏 Coordenadas:</strong><br>
+                Lat: ${marco.latitude.toFixed(6)}°<br>
+                Lon: ${marco.longitude.toFixed(6)}°
+            </div>
+        `;
+    }, { maxWidth: 300 });
+
+    return marker;
 }
 
 // ==========================================
 // FUNÇÕES AUXILIARES DE INICIALIZAÇÃO
 // ==========================================
 
+/**
+ * Atualiza as estatísticas do header (marcos, propriedades, clientes)
+ * Esta função é chamada automaticamente a cada 30 segundos
+ */
 async function atualizarEstatisticas() {
     try {
-        const response = await fetch('/api/estatisticas');
-        const result = await response.json();
+        // Buscar estatísticas de marcos
+        const resMarcos = await fetch('/api/estatisticas');
+        const dataMarcos = await resMarcos.json();
 
-        if (result.success && result.data) {
-            // Atualizar estatísticas no header/dashboard
-            const stats = result.data;
+        if (dataMarcos.success && dataMarcos.data) {
+            const totalMarcos = dataMarcos.data.total || 0;
+            const statMarcosEl = document.getElementById('stat-marcos');
+            if (statMarcosEl) {
+                statMarcosEl.textContent = `📍 Marcos: ${totalMarcos.toLocaleString('pt-BR')}`;
+            }
 
+            // Atualizar estatísticas detalhadas se os elementos existirem (dashboard)
             if (document.getElementById('stat-total')) {
-                document.getElementById('stat-total').textContent = stats.total || 0;
+                document.getElementById('stat-total').textContent = totalMarcos;
             }
             if (document.getElementById('stat-v')) {
-                document.getElementById('stat-v').textContent = stats.tipoV || 0;
+                document.getElementById('stat-v').textContent = dataMarcos.data.tipoV || 0;
             }
             if (document.getElementById('stat-m')) {
-                document.getElementById('stat-m').textContent = stats.tipoM || 0;
+                document.getElementById('stat-m').textContent = dataMarcos.data.tipoM || 0;
             }
             if (document.getElementById('stat-p')) {
-                document.getElementById('stat-p').textContent = stats.tipoP || 0;
+                document.getElementById('stat-p').textContent = dataMarcos.data.tipoP || 0;
             }
-
-            console.log('✅ Estatísticas atualizadas');
         }
+
+        // Buscar estatísticas de propriedades
+        const resProp = await fetch('/api/propriedades?limite=1');
+        const dataProp = await resProp.json();
+        if (dataProp.success) {
+            const statPropEl = document.getElementById('stat-propriedades');
+            if (statPropEl) {
+                statPropEl.textContent = `🏘️ Propriedades: ${dataProp.total.toLocaleString('pt-BR')}`;
+            }
+        }
+
+        // Buscar estatísticas de clientes
+        const resClientes = await fetch('/api/clientes?limite=1');
+        const dataClientes = await resClientes.json();
+        if (dataClientes.success) {
+            const statClientesEl = document.getElementById('stat-clientes');
+            if (statClientesEl) {
+                statClientesEl.textContent = `👥 Clientes: ${dataClientes.total.toLocaleString('pt-BR')}`;
+            }
+        }
+
+        console.log('✅ Estatísticas atualizadas');
     } catch (error) {
-        console.error('Erro ao atualizar estatísticas:', error);
+        console.error('❌ Erro ao atualizar estatísticas:', error);
+    }
+}
+
+// Configurar atualização automática das estatísticas a cada 30 segundos
+let intervaloEstatisticas = null;
+
+/**
+ * Inicia a atualização automática das estatísticas
+ */
+function iniciarAtualizacaoAutomatica() {
+    // Limpar intervalo anterior se existir
+    if (intervaloEstatisticas) {
+        clearInterval(intervaloEstatisticas);
+    }
+
+    // Atualizar imediatamente
+    atualizarEstatisticas();
+
+    // Configurar atualização automática a cada 30 segundos (30000ms)
+    intervaloEstatisticas = setInterval(atualizarEstatisticas, 30000);
+    console.log('✅ Atualização automática de estatísticas ativada (30s)');
+}
+
+/**
+ * Para a atualização automática das estatísticas
+ */
+function pararAtualizacaoAutomatica() {
+    if (intervaloEstatisticas) {
+        clearInterval(intervaloEstatisticas);
+        intervaloEstatisticas = null;
+        console.log('⏸️ Atualização automática de estatísticas pausada');
     }
 }
 
