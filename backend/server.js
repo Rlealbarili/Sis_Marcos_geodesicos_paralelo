@@ -217,28 +217,33 @@ app.get('/api/marcos', (req, res) => {
 
         console.log(`[Server] Buscando marcos - limite: ${limite}, offset: ${offset}, format: ${format}`);
 
-        // Query otimizada - selecionar apenas campos necessários
+        // Query otimizada - retornar TODOS os campos necessários
+        // coordenada_e e coordenada_n já estão em metros (UTM)
         let query = `
             SELECT
                 id,
-                codigo as nome,
+                codigo,
                 tipo,
+                localizacao,
                 localizacao as municipio,
                 '' as uf,
-                ROUND(CAST(REPLACE(coordenada_n, ',', '.') AS REAL) / 1000000, 6) as latitude,
-                ROUND(CAST(REPLACE(coordenada_e, ',', '.') AS REAL) / 1000000, 6) as longitude,
-                ROUND(CAST(REPLACE(altitude_h, ',', '.') AS REAL), 2) as altitude,
-                status_campo as status
+                coordenada_e,
+                coordenada_n,
+                altitude_h,
+                altitude_h as altitude,
+                lote,
+                status_campo
             FROM marcos
             WHERE ativo = ?
         `;
         const params = [ativo];
 
         // Filtro por bbox (viewport do mapa)
+        // bbox deve estar em coordenadas UTM (metros)
         if (bbox) {
             const [west, south, east, north] = bbox.split(',').map(Number);
-            query += ` AND CAST(REPLACE(coordenada_e, ',', '.') AS REAL) / 1000000 BETWEEN ? AND ?`;
-            query += ` AND CAST(REPLACE(coordenada_n, ',', '.') AS REAL) / 1000000 BETWEEN ? AND ?`;
+            query += ` AND coordenada_e BETWEEN ? AND ?`;
+            query += ` AND coordenada_n BETWEEN ? AND ?`;
             params.push(west, east, south, north);
         }
 
