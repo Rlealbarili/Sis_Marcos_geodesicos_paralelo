@@ -2,6 +2,16 @@
 const API_URL = window.location.origin;
 let marcoAtual = null;
 
+// =========================================
+// DEFINIÇÃO EPSG:31982 - SIRGAS 2000 UTM Zone 22S
+// =========================================
+// Esta definição é OBRIGATÓRIA para converter coordenadas UTM para Lat/Lng
+proj4.defs(
+  'EPSG:31982',
+  '+proj=utm +zone=22 +south +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs +type=crs'
+);
+console.log('✅ EPSG:31982 definido:', proj4.defs('EPSG:31982'));
+
 // ==========================================
 // INICIALIZAÇÃO DO SISTEMA
 // ==========================================
@@ -649,19 +659,35 @@ function inicializarMapa() {
     }
 }
 
-function utmParaLatLng(e, n) {
+function utmParaLatLng(x, y) {
     try {
+        // Verificar se proj4 está carregado
         if (typeof proj4 === 'undefined') {
-            console.error('Biblioteca proj4 não carregada');
+            console.error('❌ Biblioteca proj4 não carregada');
             return null;
         }
-        
-        const utmCoords = [parseFloat(e), parseFloat(n)];
-        const wgs84Coords = proj4('EPSG:31982', 'EPSG:4326', utmCoords);
-        
-        return { lat: wgs84Coords[1], lng: wgs84Coords[0] };
-    } catch (error) {
-        console.error('Erro ao converter coordenadas:', error);
+
+        // Verificar se EPSG:31982 está definido
+        if (!proj4.defs('EPSG:31982')) {
+            console.error('❌ EPSG:31982 não está definido! Execute proj4.defs() primeiro.');
+            return null;
+        }
+
+        // Converter coordenadas UTM para WGS84
+        const [lng, lat] = proj4('EPSG:31982', 'EPSG:4326', [parseFloat(x), parseFloat(y)]);
+
+        // Validar resultado
+        if (isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+            console.warn(`⚠️ Coordenadas inválidas: X=${x}, Y=${y} → Lat=${lat}, Lng=${lng}`);
+            return null;
+        }
+
+        // Log de sucesso (comentar em produção para performance)
+        // console.log(`✅ Conversão OK: UTM(${x}, ${y}) → LatLng(${lat.toFixed(6)}, ${lng.toFixed(6)})`);
+
+        return { lat, lng };
+    } catch (erro) {
+        console.error(`❌ Erro ao converter X=${x}, Y=${y}:`, erro.message);
         return null;
     }
 }
@@ -4141,3 +4167,48 @@ async function importarPlanilhaMarcos() {
 }
 
 console.log('✅ Sistema de importação de planilhas adicionado!');
+
+// =========================================
+// TESTE DE VALIDAÇÃO - CONVERSÃO UTM → LAT/LNG
+// =========================================
+// Este teste verifica se a projeção EPSG:31982 está funcionando corretamente
+(function testeConversaoUTM() {
+    console.log('\n🧪 TESTE DE CONVERSÃO UTM → LAT/LNG');
+    console.log('==========================================');
+
+    // Verificar se EPSG:31982 está definido
+    const definicao = proj4.defs('EPSG:31982');
+    if (definicao) {
+        console.log('✅ EPSG:31982 está definido:', definicao);
+    } else {
+        console.error('❌ FALHA: EPSG:31982 NÃO está definido!');
+        return;
+    }
+
+    // Coordenada de teste (exemplo de Curitiba)
+    const testeX = 639202.88;
+    const testeY = 7187316.96;
+
+    console.log(`\n📍 Testando coordenada: UTM(${testeX}, ${testeY})`);
+
+    const resultado = utmParaLatLng(testeX, testeY);
+
+    if (resultado && resultado.lat && resultado.lng) {
+        console.log(`✅ Conversão bem-sucedida!`);
+        console.log(`   Latitude:  ${resultado.lat.toFixed(6)}`);
+        console.log(`   Longitude: ${resultado.lng.toFixed(6)}`);
+
+        // Validar se está em território brasileiro (aproximadamente)
+        if (resultado.lat >= -34 && resultado.lat <= 5 && resultado.lng >= -75 && resultado.lng <= -34) {
+            console.log('✅ Coordenadas dentro do território brasileiro - OK!');
+            console.log('\n🎉 TESTE PASSOU! Sistema pronto para converter marcos.');
+        } else {
+            console.warn('⚠️ Coordenadas fora do território brasileiro - verificar!');
+        }
+    } else {
+        console.error('❌ FALHA: Conversão retornou null!');
+        console.error('   Verifique a definição do EPSG:31982');
+    }
+
+    console.log('==========================================\n');
+})();
