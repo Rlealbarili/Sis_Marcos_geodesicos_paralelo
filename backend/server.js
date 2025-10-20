@@ -33,6 +33,49 @@ function getDataHoraBrasil() {
 console.log('[Server] Timezone configurada:', process.env.TZ);
 console.log('[Server] Data/hora atual:', new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }));
 
+// ==========================================
+// CONFIGURAÇÃO PROJ4 - EPSG:31982 (SIRGAS 2000 / UTM Zone 22S)
+// ==========================================
+proj4.defs(
+  'EPSG:31982',
+  '+proj=utm +zone=22 +south +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs +type=crs'
+);
+console.log('[Server] ✅ EPSG:31982 (SIRGAS 2000 / UTM Zone 22S) definido');
+
+/**
+ * Converte coordenadas UTM (EPSG:31982) para WGS84 (lat/lng)
+ * @param {number} x - Coordenada Este (E) em metros
+ * @param {number} y - Coordenada Norte (N) em metros
+ * @returns {{latitude: number, longitude: number}|null}
+ */
+function utmParaLatLng(x, y) {
+  // Validar entrada
+  if (!x || !y || isNaN(x) || isNaN(y)) {
+    return null;
+  }
+
+  // Validar range UTM Zone 22S
+  if (x < 166000 || x > 834000 || y < 0 || y > 10000000) {
+    return null;
+  }
+
+  try {
+    const [longitude, latitude] = proj4('EPSG:31982', 'EPSG:4326', [x, y]);
+
+    // Validar resultado
+    if (isNaN(latitude) || isNaN(longitude) ||
+        latitude < -90 || latitude > 90 ||
+        longitude < -180 || longitude > 180) {
+      return null;
+    }
+
+    return { latitude, longitude };
+  } catch (erro) {
+    console.error(`[Server] Erro ao converter UTM (${x}, ${y}):`, erro.message);
+    return null;
+  }
+}
+
 const app = express();
 const PORT = 3000;
 
@@ -300,6 +343,34 @@ app.get('/api/marcos', (req, res) => {
 
         const stmt = db.prepare(query);
         const marcos = stmt.all(...params);
+
+        // ==========================================
+        // CONVERTER UTM → LAT/LNG PARA CADA MARCO
+        // ==========================================
+        let convertidos = 0;
+        let falhados = 0;
+
+        marcos.forEach(marco => {
+            if (marco.coordenada_e && marco.coordenada_n) {
+                const coords = utmParaLatLng(marco.coordenada_e, marco.coordenada_n);
+                if (coords) {
+                    marco.latitude = coords.latitude;
+                    marco.longitude = coords.longitude;
+                    convertidos++;
+                } else {
+                    marco.latitude = null;
+                    marco.longitude = null;
+                    falhados++;
+                }
+            } else {
+                marco.latitude = null;
+                marco.longitude = null;
+            }
+        });
+
+        if (convertidos > 0) {
+            console.log(`[Server] ✅ ${convertidos} marcos convertidos UTM→LatLng` + (falhados > 0 ? ` (${falhados} falharam)` : ''));
+        }
 
         // Contar total de registros (sem limite)
         let countQuery = 'SELECT COUNT(*) as total FROM marcos WHERE ativo = ?';

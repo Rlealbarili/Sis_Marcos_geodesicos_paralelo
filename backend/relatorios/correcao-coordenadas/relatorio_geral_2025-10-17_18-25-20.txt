@@ -1,0 +1,47 @@
+
+===========================================
+RELATÓRIO DE CORREÇÃO DE COORDENADAS UTM
+===========================================
+Data: 17/10/2025, 15:25:20
+
+ESTATÍSTICAS INICIAIS:
+- Total de marcos levantados: 815
+- Coordenadas válidas: 101
+- X fora do range: 713
+- Y fora do range: 709
+- Ambos problemáticos: 708
+
+PROCESSAMENTO:
+- Marcos analisados: 714
+- Marcos já válidos: 101
+- Correções aplicadas: 112 (15.7%)
+- Falhas na correção: 602
+
+VALIDAÇÃO CONVERSÃO LAT/LNG:
+- Conversíveis: 112
+- Não conversíveis: 0
+- Nota: Backend converte automaticamente ao retornar dados da API
+
+RANGES UTILIZADOS:
+- X (Easting): 200000 - 800000 metros
+- Y (Northing): 7000000 - 7500000 metros
+
+RESULTADO FINAL:
+- Total de marcos válidos após correção: 213
+- Marcos ainda com problemas: 602
+
+PRÓXIMAS AÇÕES:
+- Revisar manualmente os 602 casos pendentes
+- Verificar origem dos dados com engenharia
+- Atualizar sistema de importação para prevenir problema
+
+ARQUIVOS GERADOS:
+✅ marcos_corrigidos_2025-10-17_18-25-20.csv (112 registros)
+✅ marcos_nao_corrigidos_2025-10-17_18-25-20.csv (602 registros)
+✅ relatorio_geral_2025-10-17_18-25-20.txt
+
+BACKUP:
+✅ Backup do banco criado antes da correção
+   Localização: C:\Sis_Marcos_geodesicos_paralelo-main\backend\backups
+
+===========================================

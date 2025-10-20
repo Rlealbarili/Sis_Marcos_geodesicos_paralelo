@@ -11,7 +11,8 @@
       "Bash(node --check:*)",
       "Bash(node:*)",
       "Bash(timeout 5 node:*)",
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "Bash(python:*)"
     ],
     "deny": [],
     "ask": []

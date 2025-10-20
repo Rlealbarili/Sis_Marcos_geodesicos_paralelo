@@ -1,0 +1,21 @@
+
+═══════════════════════════════════════════════════════════
+RELATÓRIO DE CONVERSÃO UTM → LAT/LNG
+═══════════════════════════════════════════════════════════
+Data: 20/10/2025, 08:27:30
+
+RESULTADO:
+  ✅ Sucessos: 0 (0.0%)
+  ♻️  Já convertidos: 213
+  ❌ Falhas: 13021 (98.4%)
+  📊 Total processado: 13234
+
+VALIDAÇÃO:
+  - Região: Paraná
+  - Latitude: -27° a -22°
+  - Longitude: -55° a -48°
+
+ARQUIVOS:
+  📁 Backup: C:\Sis_Marcos_geodesicos_paralelo-main\backend\backups\marcos_backup_2025-10-20_11-27-30.db
+  📁 Banco atualizado: C:\Sis_Marcos_geodesicos_paralelo-main\database\marcos.db
+═══════════════════════════════════════════════════════════

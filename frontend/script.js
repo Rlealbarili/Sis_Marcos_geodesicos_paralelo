@@ -692,6 +692,87 @@ function utmParaLatLng(x, y) {
     }
 }
 
+/**
+ * Obtém coordenadas de um marco priorizando dados já convertidos
+ * @param {Object} marco - Objeto do marco da API
+ * @returns {Object|null} - {lat, lng} ou null se inválido
+ */
+function obterCoordenadasMarco(marco) {
+    // PRIORIDADE 1: Usar latitude/longitude do banco (já convertido corretamente)
+    if (marco.latitude != null && marco.longitude != null &&
+        !isNaN(marco.latitude) && !isNaN(marco.longitude)) {
+
+        // Validar se coordenadas são válidas para região do Paraná
+        const latValida = marco.latitude >= -27 && marco.latitude <= -22;
+        const lngValida = marco.longitude >= -55 && marco.longitude <= -48;
+
+        if (latValida && lngValida) {
+            return {
+                lat: parseFloat(marco.latitude),
+                lng: parseFloat(marco.longitude)
+            };
+        } else {
+            // Log apenas primeiros 5 casos de coordenadas fora do Paraná
+            if (!obterCoordenadasMarco._countForaPR) obterCoordenadasMarco._countForaPR = 0;
+            obterCoordenadasMarco._countForaPR++;
+
+            if (obterCoordenadasMarco._countForaPR <= 5) {
+                console.warn(`⚠️ Coordenadas fora do Paraná:`, {
+                    codigo: marco.codigo,
+                    lat: marco.latitude,
+                    lng: marco.longitude
+                });
+            }
+        }
+    }
+
+    // PRIORIDADE 2: Tentar converter UTM (se não tiver lat/lng válido)
+    if (marco.coordenada_e != null && marco.coordenada_n != null) {
+        const e = parseFloat(marco.coordenada_e);
+        const n = parseFloat(marco.coordenada_n);
+
+        // Validar range UTM Zone 22S
+        const isUTMValid = !isNaN(e) && !isNaN(n) &&
+                           e >= 166000 && e <= 834000 &&
+                           n >= 0 && n <= 10000000;
+
+        if (isUTMValid) {
+            try {
+                const coords = utmParaLatLng(e, n);
+
+                if (coords) {
+                    // Validar resultado da conversão
+                    const latValida = coords.lat >= -27 && coords.lat <= -22;
+                    const lngValida = coords.lng >= -55 && coords.lng <= -48;
+
+                    if (latValida && lngValida) {
+                        return coords;
+                    } else {
+                        if (!obterCoordenadasMarco._countConvInvalida) obterCoordenadasMarco._countConvInvalida = 0;
+                        obterCoordenadasMarco._countConvInvalida++;
+
+                        if (obterCoordenadasMarco._countConvInvalida <= 5) {
+                            console.warn(`⚠️ Conversão UTM resultou em coordenadas inválidas:`, {
+                                codigo: marco.codigo,
+                                utm: { e, n },
+                                resultado: coords
+                            });
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error(`❌ Erro ao converter UTM:`, {
+                    codigo: marco.codigo,
+                    erro: error.message
+                });
+            }
+        }
+    }
+
+    // Se chegou aqui, não conseguiu obter coordenadas válidas
+    return null;
+}
+
 async function carregarMarcosNoMapa() {
     console.log('🗺️ Carregando marcos no mapa...');
 
@@ -703,95 +784,95 @@ async function carregarMarcosNoMapa() {
         if (data.success) {
             console.log(`📊 API retornou: ${data.data.length} marcos levantados`);
 
+            // DIAGNÓSTICO: Primeiros 3 marcos da API
+            console.log('🔍 DIAGNÓSTICO - Primeiros 3 marcos da API:');
+            console.table(data.data.slice(0, 3).map(m => ({
+                codigo: m.codigo,
+                lat_banco: m.latitude,
+                lng_banco: m.longitude,
+                utm_e: m.coordenada_e,
+                utm_n: m.coordenada_n
+            })));
+
             todosMarcos = data.data;
             marcosLayer.clearLayers();
             marcadores = [];
 
             let bounds = [];
-            let marcosComCoordenadas = 0;
+            let marcosValidos = 0;
+            let marcosInvalidos = 0;
 
-            let marcosIgnorados = 0;
+            // Resetar contadores da função obterCoordenadasMarco
+            obterCoordenadasMarco._countForaPR = 0;
+            obterCoordenadasMarco._countConvInvalida = 0;
 
             data.data.forEach(marco => {
                 // VALIDAÇÃO 1: Status LEVANTADO
                 if (marco.status_campo !== 'LEVANTADO') {
-                    marcosIgnorados++;
-                    if (marcosIgnorados <= 5) {
-                        console.warn(`Marco ${marco.codigo} ignorado: status ${marco.status_campo}`);
-                    }
+                    marcosInvalidos++;
                     return;
                 }
 
-                const e = parseFloat(marco.coordenada_e);
-                const n = parseFloat(marco.coordenada_n);
+                // USAR NOVA FUNÇÃO COM VALIDAÇÃO DO PARANÁ
+                const coords = obterCoordenadasMarco(marco);
 
-                // VALIDAÇÃO 2: Coordenadas em range UTM válido
-                // E: 166.000 - 834.000 metros (Zone 22S range)
-                // N: 0 - 10.000.000 metros (hemisfério sul)
-                const isUTMValid = !isNaN(e) && !isNaN(n) &&
-                                   e >= 166000 && e <= 834000 &&
-                                   n >= 0 && n <= 10000000;
+                // Se conseguiu obter coordenadas válidas
+                if (coords && !isNaN(coords.lat) && !isNaN(coords.lng)) {
+                    bounds.push([coords.lat, coords.lng]);
+                    marcosValidos++;
 
-                if (isUTMValid) {
-                    const coords = utmParaLatLng(e, n);
+                    const e = parseFloat(marco.coordenada_e);
+                    const n = parseFloat(marco.coordenada_n);
 
-                    if (coords && !isNaN(coords.lat) && !isNaN(coords.lng)) {
-                        bounds.push([coords.lat, coords.lng]);
-                        marcosComCoordenadas++;
+                    let cor = '#84c225';
+                    if (marco.tipo === 'M') cor = '#5a9618';
+                    if (marco.tipo === 'P') cor = '#9dd447';
 
-                        let cor = '#84c225';
-                        if (marco.tipo === 'M') cor = '#5a9618';
-                        if (marco.tipo === 'P') cor = '#9dd447';
+                    const icone = L.divIcon({
+                        className: 'custom-marker',
+                        html: `<div style="background: ${cor}; width: 16px; height: 16px; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>`,
+                        iconSize: [16, 16],
+                        iconAnchor: [8, 8]
+                    });
 
-                        const icone = L.divIcon({
-                            className: 'custom-marker',
-                            html: `<div style="background: ${cor}; width: 16px; height: 16px; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>`,
-                            iconSize: [16, 16],
-                            iconAnchor: [8, 8]
-                        });
+                    const marker = L.marker([coords.lat, coords.lng], { icon: icone })
+                        .bindPopup(`
+                            <div style="min-width: 200px;">
+                                <h4 style="margin: 0 0 10px 0; color: #84c225;">${marco.codigo}</h4>
+                                <p style="margin: 5px 0;"><strong>Tipo:</strong> ${marco.tipo}</p>
+                                <p style="margin: 5px 0;"><strong>Status:</strong> <span style="color: #28a745;">LEVANTADO</span></p>
+                                <p style="margin: 5px 0;"><strong>Localização:</strong> ${marco.localizacao || '-'}</p>
+                                <p style="margin: 5px 0;"><strong>Lote:</strong> ${marco.lote || '-'}</p>
+                                <p style="margin: 5px 0;"><strong>Lat:</strong> ${coords.lat.toFixed(6)}°</p>
+                                <p style="margin: 5px 0;"><strong>Lng:</strong> ${coords.lng.toFixed(6)}°</p>
+                                <p style="margin: 5px 0;"><strong>E:</strong> ${e.toFixed(2)} m</p>
+                                <p style="margin: 5px 0;"><strong>N:</strong> ${n.toFixed(2)} m</p>
+                                <button onclick="verDetalhes(${marco.id})" style="margin-top: 10px; padding: 8px 15px; background: #84c225; color: white; border: none; border-radius: 5px; cursor: pointer;">Ver Detalhes</button>
+                            </div>
+                        `)
+                        .addTo(marcosLayer);
 
-                        const marker = L.marker([coords.lat, coords.lng], { icon: icone })
-                            .bindPopup(`
-                                <div style="min-width: 200px;">
-                                    <h4 style="margin: 0 0 10px 0; color: #84c225;">${marco.codigo}</h4>
-                                    <p style="margin: 5px 0;"><strong>Tipo:</strong> ${marco.tipo}</p>
-                                    <p style="margin: 5px 0;"><strong>Status:</strong> <span style="color: #28a745;">LEVANTADO</span></p>
-                                    <p style="margin: 5px 0;"><strong>Localização:</strong> ${marco.localizacao || '-'}</p>
-                                    <p style="margin: 5px 0;"><strong>Lote:</strong> ${marco.lote || '-'}</p>
-                                    <p style="margin: 5px 0;"><strong>E:</strong> ${e.toFixed(2)} m</p>
-                                    <p style="margin: 5px 0;"><strong>N:</strong> ${n.toFixed(2)} m</p>
-                                    <button onclick="verDetalhes(${marco.id})" style="margin-top: 10px; padding: 8px 15px; background: #84c225; color: white; border: none; border-radius: 5px; cursor: pointer;">Ver Detalhes</button>
-                                </div>
-                            `)
-                            .addTo(marcosLayer);
-
-                        marker.marcoData = marco;
-                        marcadores.push(marker);
-                    } else {
-                        marcosIgnorados++;
-                        if (marcosIgnorados <= 10) {
-                            console.warn(`⚠️ Marco ${marco.codigo}: conversão UTM→LatLng falhou`);
-                        }
-                    }
+                    marker.marcoData = marco;
+                    marcadores.push(marker);
                 } else {
-                    marcosIgnorados++;
-                    if (marcosIgnorados <= 10) {
-                        console.warn(`⚠️ Marco ${marco.codigo}: coordenadas inválidas (E:${e}, N:${n})`);
-                    }
+                    marcosInvalidos++;
                 }
             });
 
-            if (marcosIgnorados > 0) {
-                console.warn(`⚠️ Total de marcos ignorados: ${marcosIgnorados}`);
+            // Log final com estatísticas
+            console.log(`📊 Marcos processados: ${marcosValidos} válidos, ${marcosInvalidos} inválidos`);
+
+            if (marcosInvalidos > 0) {
+                console.warn(`⚠️ Total de marcos inválidos/ignorados: ${marcosInvalidos}`);
             }
 
             if (bounds.length > 0) {
                 map.fitBounds(bounds, { padding: [50, 50] });
-                console.log(`✅ Mapa: ${marcosComCoordenadas} marcos plotados com sucesso`);
-                if (marcosIgnorados > 0) {
-                    showToast(`${marcosComCoordenadas} marcos no mapa (${marcosIgnorados} ignorados)`, 'success');
+                console.log(`✅ Mapa: ${marcosValidos} marcos plotados com sucesso`);
+                if (marcosInvalidos > 0) {
+                    showToast(`${marcosValidos} marcos no mapa (${marcosInvalidos} ignorados)`, 'success');
                 } else {
-                    showToast(`${marcosComCoordenadas} marcos no mapa (apenas levantados)`, 'success');
+                    showToast(`${marcosValidos} marcos no mapa`, 'success');
                 }
             } else {
                 console.warn('⚠️ Nenhum marco levantado válido encontrado');
