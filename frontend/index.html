@@ -504,5 +504,20 @@
     <script src="js/clustering.js"></script>
     <script src="js/performance-test.js"></script>
     <script src="script.js"></script>
+    <script src="busca-raio.js"></script>
+    <script>
+        // Inicializar controle de busca por raio quando o mapa estiver pronto
+        document.addEventListener('DOMContentLoaded', () => {
+            // Aguardar 1 segundo para garantir que o mapa foi inicializado
+            setTimeout(() => {
+                if (typeof map !== 'undefined' && map) {
+                    adicionarControleBuscaRaio();
+                    console.log('✅ Controle de busca por raio inicializado');
+                } else {
+                    console.warn('⚠️ Mapa não encontrado, controle de busca não adicionado');
+                }
+            }, 1000);
+        });
+    </script>
 </body>
 </html>

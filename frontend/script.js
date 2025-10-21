@@ -1,5 +1,5 @@
 // Configuração da API
-const API_URL = window.location.origin;
+const API_URL = 'http://localhost:3001';  // PostgreSQL + PostGIS API
 let marcoAtual = null;
 
 // =========================================
