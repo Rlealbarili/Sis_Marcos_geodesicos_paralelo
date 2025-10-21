@@ -1,0 +1,31 @@
+═══════════════════════════════════════════════════════════
+IMPORTAÇÃO DA PLANILHA MESTRE CONSOLIDADA
+═══════════════════════════════════════════════════════════
+Data: 20/10/2025, 14:23:50
+
+📦 BACKUP:
+   Arquivo: marcos_PRE_REIMPORT_2025-10-20_17-23-50.db
+   Localização: C:\Sis_Marcos_geodesicos_paralelo-main\backend\backups\marcos_PRE_REIMPORT_2025-10-20_17-23-50.db
+
+📄 ORIGEM:
+   Arquivo: C:\CONTROLE MARCOS COGEP\PLANILHA_MESTRE_CONSOLIDADA.csv
+   Registros lidos: 19041
+
+📊 PROCESSAMENTO:
+   ✅ Sucessos: 19041 (100.0%)
+   ❌ Falhas: 0 (0.0%)
+
+📍 DISTRIBUIÇÃO:
+   Marcos Levantados: 218
+   Marcos Pendentes: 18823
+
+🌍 CONVERSÃO LAT/LNG:
+   Com coordenadas: 218 (100.0%)
+   Válidos no Paraná: 218 (100.0%)
+
+💾 BANCO DE DADOS:
+   Total de registros: 19041
+   Índices criados: 8
+   Status: ✅ OPERACIONAL
+
+═══════════════════════════════════════════════════════════

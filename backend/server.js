@@ -252,106 +252,164 @@ app.get('/', (req, res) => {
 
 app.get('/api/marcos', (req, res) => {
     try {
-        let { bbox, tipo, codigo, localizacao, lote, metodo, limites, uf, status_campo, ativo = '1', limite = 2000, offset = 0, format = 'json' } = req.query;
+        let { bbox, tipo, codigo, localizacao, lote, metodo, limites, uf, status_campo, ativo = '1', limite = 2000, offset = 0, format = 'json', levantados } = req.query;
 
         // IMPORTANTE: Respeitar o limite (máximo de 5000 marcos)
         limite = Math.min(parseInt(limite) || 2000, 5000);
         offset = parseInt(offset) || 0;
+        const apenasLevantados = levantados === 'true';
 
-        console.log(`[Server] Buscando marcos - limite: ${limite}, offset: ${offset}, format: ${format}`);
+        console.log(`[Server] Buscando marcos - limite: ${limite}, offset: ${offset}, format: ${format}, apenasLevantados: ${apenasLevantados}`);
 
-        // Query otimizada - retornar TODOS os campos necessários
-        // coordenada_e e coordenada_n já estão em metros (UTM)
-        let query = `
-            SELECT
-                id,
-                codigo,
-                tipo,
-                localizacao,
-                localizacao as municipio,
-                '' as uf,
-                coordenada_e,
-                coordenada_n,
-                altitude_h,
-                altitude_h as altitude,
-                lote,
-                status_campo
-            FROM marcos
-            WHERE ativo = ?
-        `;
-        const params = [ativo];
+        // Query otimizada - PRIORIZA marcos_levantados (com coordenadas)
+        let baseQuery;
 
-        // Filtro por bbox (viewport do mapa)
-        // bbox deve estar em coordenadas UTM (metros)
+        if (apenasLevantados) {
+            // Retorna APENAS marcos com coordenadas
+            baseQuery = `
+                SELECT
+                    id,
+                    codigo,
+                    tipo,
+                    municipio,
+                    estado as uf,
+                    coordenada_e,
+                    coordenada_n,
+                    altitude,
+                    NULL as lote,
+                    status as status_campo,
+                    latitude,
+                    longitude,
+                    metodo,
+                    NULL as limites,
+                    1 as prioridade
+                FROM marcos_levantados
+                WHERE latitude IS NOT NULL AND longitude IS NOT NULL
+            `;
+        } else {
+            // Retorna LEVANTADOS PRIMEIRO (prioridade 1), depois pendentes (prioridade 2)
+            baseQuery = `
+                SELECT
+                    id,
+                    codigo,
+                    tipo,
+                    municipio,
+                    estado as uf,
+                    coordenada_e,
+                    coordenada_n,
+                    altitude,
+                    NULL as lote,
+                    status as status_campo,
+                    latitude,
+                    longitude,
+                    metodo,
+                    NULL as limites,
+                    1 as prioridade
+                FROM marcos_levantados
+                UNION ALL
+                SELECT
+                    id,
+                    codigo,
+                    tipo,
+                    municipio,
+                    estado as uf,
+                    NULL as coordenada_e,
+                    NULL as coordenada_n,
+                    NULL as altitude,
+                    NULL as lote,
+                    'PENDENTE' as status_campo,
+                    NULL as latitude,
+                    NULL as longitude,
+                    NULL as metodo,
+                    NULL as limites,
+                    2 as prioridade
+                FROM marcos_pendentes
+            `;
+        }
+
+        // Construir WHERE clause
+        let whereConditions = [];
+        const params = [];
+
+        // Filtro por bbox (viewport do mapa) - só marcos levantados têm coordenadas
         if (bbox) {
             const [west, south, east, north] = bbox.split(',').map(Number);
-            query += ` AND coordenada_e BETWEEN ? AND ?`;
-            query += ` AND coordenada_n BETWEEN ? AND ?`;
+            whereConditions.push(`(coordenada_e BETWEEN ? AND ? AND coordenada_n BETWEEN ? AND ?)`);
             params.push(west, east, south, north);
         }
 
         // Filtro por tipo
         if (tipo) {
-            query += ` AND tipo LIKE ?`;
+            whereConditions.push(`tipo LIKE ?`);
             params.push(`%${tipo}%`);
         }
 
         // Filtro por código
         if (codigo) {
-            query += ` AND codigo LIKE ?`;
+            whereConditions.push(`codigo LIKE ?`);
             params.push(`%${codigo}%`);
         }
 
-        // Filtro por localização
+        // Filtro por localização/município
         if (localizacao) {
-            query += ` AND localizacao LIKE ?`;
+            whereConditions.push(`municipio LIKE ?`);
             params.push(`%${localizacao}%`);
         }
 
         // Filtro por lote
         if (lote) {
-            query += ` AND lote LIKE ?`;
+            whereConditions.push(`lote LIKE ?`);
             params.push(`%${lote}%`);
         }
 
         // Filtro por método
         if (metodo) {
-            query += ` AND metodo LIKE ?`;
+            whereConditions.push(`metodo LIKE ?`);
             params.push(`%${metodo}%`);
         }
 
         // Filtro por limites
         if (limites) {
-            query += ` AND limites LIKE ?`;
+            whereConditions.push(`limites LIKE ?`);
             params.push(`%${limites}%`);
         }
 
         // Filtro por UF
         if (uf) {
-            query += ` AND uf = ?`;
+            whereConditions.push(`uf = ?`);
             params.push(uf);
         }
 
         // Filtro por status
         if (status_campo) {
-            query += ` AND status_campo = ?`;
+            whereConditions.push(`status_campo = ?`);
             params.push(status_campo);
         }
 
-        query += ` ORDER BY codigo LIMIT ? OFFSET ?`;
+        // Montar query final
+        let query = `SELECT * FROM (${baseQuery}) AS marcos_unidos`;
+        if (whereConditions.length > 0) {
+            query += ` WHERE ${whereConditions.join(' AND ')}`;
+        }
+        // Ordenar por PRIORIDADE primeiro (levantados antes), depois por código
+        query += ` ORDER BY prioridade, codigo LIMIT ? OFFSET ?`;
         params.push(limite, offset);
 
         const stmt = db.prepare(query);
         const marcos = stmt.all(...params);
 
         // ==========================================
-        // CONVERTER UTM → LAT/LNG PARA CADA MARCO
+        // CONVERTER UTM → LAT/LNG (apenas fallback, lat/lng já vem do banco)
         // ==========================================
         let convertidos = 0;
         let falhados = 0;
 
         marcos.forEach(marco => {
-            if (marco.coordenada_e && marco.coordenada_n) {
+            // Se já tem latitude/longitude do banco, usar
+            if (marco.latitude !== null && marco.longitude !== null) {
+                // Já tem do banco, nada a fazer
+            } else if (marco.coordenada_e && marco.coordenada_n) {
+                // Fallback: converter UTM para LatLng
                 const coords = utmParaLatLng(marco.coordenada_e, marco.coordenada_n);
                 if (coords) {
                     marco.latitude = coords.latitude;
@@ -369,12 +427,25 @@ app.get('/api/marcos', (req, res) => {
         });
 
         if (convertidos > 0) {
-            console.log(`[Server] ✅ ${convertidos} marcos convertidos UTM→LatLng` + (falhados > 0 ? ` (${falhados} falharam)` : ''));
+            console.log(`[Server] ⚠️ ${convertidos} marcos convertidos em tempo real (fallback)` + (falhados > 0 ? ` (${falhados} falharam)` : ''));
         }
 
         // Contar total de registros (sem limite)
-        let countQuery = 'SELECT COUNT(*) as total FROM marcos WHERE ativo = ?';
-        const countParams = [ativo];
+        let countQuery = `
+            SELECT COUNT(*) as total FROM (
+                SELECT id FROM marcos_levantados
+                UNION ALL
+                SELECT id FROM marcos_pendentes
+            ) AS todos
+        `;
+        const countParams = [];
+        if (whereConditions.length > 0) {
+            countQuery = `
+                SELECT COUNT(*) as total FROM (${baseQuery}) AS marcos_unidos
+                WHERE ${whereConditions.join(' AND ')}
+            `;
+            countParams.push(...params.slice(0, -2)); // Remover LIMIT e OFFSET
+        }
         const countStmt = db.prepare(countQuery);
         const totalResult = countStmt.get(...countParams);
 
@@ -411,12 +482,18 @@ app.get('/api/marcos', (req, res) => {
             });
         }
 
+        // Contar levantados vs pendentes nos resultados
+        const countLevantados = marcos.filter(m => m.latitude !== null && m.longitude !== null).length;
+        const countPendentes = marcos.filter(m => m.latitude === null || m.longitude === null).length;
+
         // Retornar em formato JSON padrão
         res.json({
             success: true,
             data: marcos,
             count: marcos.length,
             total: totalResult.total,
+            levantados: countLevantados,
+            pendentes: countPendentes,
             limite: limite,
             offset: offset
         });
@@ -600,15 +677,42 @@ app.delete('/api/marcos/:id', (req, res) => {
 app.get('/api/estatisticas', (req, res) => {
     try {
         const stats = {
-            total: db.prepare('SELECT COUNT(*) as count FROM marcos WHERE ativo = 1').get().count,
-            tipoV: db.prepare("SELECT COUNT(*) as count FROM marcos WHERE tipo = 'V' AND ativo = 1").get().count,
-            tipoM: db.prepare("SELECT COUNT(*) as count FROM marcos WHERE tipo = 'M' AND ativo = 1").get().count,
-            tipoP: db.prepare("SELECT COUNT(*) as count FROM marcos WHERE tipo = 'P' AND ativo = 1").get().count,
-            ultimoCadastro: db.prepare('SELECT data_cadastro FROM marcos WHERE ativo = 1 ORDER BY data_cadastro DESC LIMIT 1').get(),
-            levantados: db.prepare("SELECT COUNT(*) as count FROM marcos WHERE status_campo = 'LEVANTADO' AND ativo = 1").get().count,
-            pendentes: db.prepare("SELECT COUNT(*) as count FROM marcos WHERE status_campo = 'PENDENTE' AND ativo = 1").get().count
+            total: db.prepare(`
+                SELECT COUNT(*) as count FROM (
+                    SELECT id FROM marcos_levantados
+                    UNION ALL
+                    SELECT id FROM marcos_pendentes
+                ) AS todos
+            `).get().count,
+            tipoV: db.prepare(`
+                SELECT COUNT(*) as count FROM (
+                    SELECT tipo FROM marcos_levantados WHERE tipo = 'V'
+                    UNION ALL
+                    SELECT tipo FROM marcos_pendentes WHERE tipo = 'V'
+                ) AS todos
+            `).get().count,
+            tipoM: db.prepare(`
+                SELECT COUNT(*) as count FROM (
+                    SELECT tipo FROM marcos_levantados WHERE tipo = 'M'
+                    UNION ALL
+                    SELECT tipo FROM marcos_pendentes WHERE tipo = 'M'
+                ) AS todos
+            `).get().count,
+            tipoP: db.prepare(`
+                SELECT COUNT(*) as count FROM (
+                    SELECT tipo FROM marcos_levantados WHERE tipo = 'P'
+                    UNION ALL
+                    SELECT tipo FROM marcos_pendentes WHERE tipo = 'P'
+                ) AS todos
+            `).get().count,
+            ultimoCadastro: db.prepare(`
+                SELECT criado_em as data_cadastro FROM marcos_levantados
+                ORDER BY criado_em DESC LIMIT 1
+            `).get(),
+            levantados: db.prepare("SELECT COUNT(*) as count FROM marcos_levantados").get().count,
+            pendentes: db.prepare("SELECT COUNT(*) as count FROM marcos_pendentes").get().count
         };
-        
+
         res.json({ success: true, data: stats });
     } catch (error) {
         console.error('Erro ao buscar estatísticas:', error);

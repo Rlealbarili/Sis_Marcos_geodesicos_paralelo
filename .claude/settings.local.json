@@ -12,7 +12,16 @@
       "Bash(node:*)",
       "Bash(timeout 5 node:*)",
       "Bash(npm install:*)",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Bash(dir:*)",
+      "Bash(npm run start:postgres:*)",
+      "Bash(npm run test:api:*)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(awk:*)",
+      "Bash(xargs kill:*)",
+      "Bash(cmd.exe //c \"taskkill //PID 14908 //F\")",
+      "Bash(cmd.exe /c \"taskkill /PID 14908 /F\")"
     ],
     "deny": [],
     "ask": []

@@ -1,0 +1,47 @@
+RELATÓRIO DE LIMPEZA COMPLETA DO BANCO DE DADOS
+Data: 20/10/2025, 10:51:56
+
+ESTADO ANTERIOR:
+- Tabelas: 10
+- Índices: 38
+- Registros: 19040
+
+BACKUP:
+- Arquivo: marcos_PRE_LIMPEZA_2025-10-20_13-51-56.db
+- Tamanho: 8.91 MB
+- Localização: C:\Sis_Marcos_geodesicos_paralelo-main\backend\backups\marcos_PRE_LIMPEZA_2025-10-20_13-51-56.db
+
+ESTRUTURA CRIADA:
+- Tabelas: 4
+  * historico_alteracoes
+  * marcos_levantados
+  * marcos_pendentes
+  * metadados_sistema
+
+- Índices: 15
+  * idx_ha_data_hora
+  * idx_ha_marco_codigo
+  * idx_ha_operacao
+  * idx_ml_codigo
+  * idx_ml_coordenadas_geo
+  * idx_ml_coordenadas_utm
+  * idx_ml_criado_em
+  * idx_ml_data_levantamento
+  * idx_ml_estado
+  * idx_ml_municipio
+  * idx_ml_status
+  * idx_ml_tipo
+  * idx_mp_codigo
+  * idx_mp_municipio
+  * idx_mp_tipo
+
+ESTADO FINAL:
+- Marcos levantados: 0
+- Marcos pendentes: 0
+- Histórico: 0
+- Metadados: 7
+
+STATUS: ✅ BANCO LIMPO E PRONTO PARA IMPORTAÇÃO
+
+PRÓXIMO PASSO:
+Execute: node scripts/importar-planilha-mestre.js

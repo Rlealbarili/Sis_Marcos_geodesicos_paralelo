@@ -777,12 +777,14 @@ async function carregarMarcosNoMapa() {
     console.log('🗺️ Carregando marcos no mapa...');
 
     try {
-        // CRÍTICO: Buscar apenas marcos LEVANTADOS
-        const response = await fetch(`${API_URL}/api/marcos?status_campo=LEVANTADO`);
+        // CRÍTICO: Buscar apenas marcos LEVANTADOS (com coordenadas)
+        const response = await fetch(`${API_URL}/api/marcos?levantados=true&limite=5000`);
         const data = await response.json();
 
         if (data.success) {
-            console.log(`📊 API retornou: ${data.data.length} marcos levantados`);
+            console.log(`📊 API retornou: ${data.data.length} marcos`);
+            console.log(`   ✅ Levantados: ${data.levantados || data.data.length}`);
+            console.log(`   📋 Pendentes: ${data.pendentes || 0}`);
 
             // DIAGNÓSTICO: Primeiros 3 marcos da API
             console.log('🔍 DIAGNÓSTICO - Primeiros 3 marcos da API:');
