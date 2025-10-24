@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🧪 Teste API PostgreSQL + PostGIS</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            padding: 20px;
+            max-width: 1000px;
+            margin: 0 auto;
+            background: #f5f5f5;
+        }
+        h1 {
+            color: #333;
+            border-bottom: 3px solid #3388ff;
+            padding-bottom: 10px;
+        }
+        .info {
+            background: #e3f2fd;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+            border-left: 4px solid #2196f3;
+        }
+        .botoes {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin: 20px 0;
+        }
+        button {
+            padding: 12px 24px;
+            cursor: pointer;
+            background: #3388ff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 14px;
+            font-weight: bold;
+            transition: background 0.3s;
+            flex: 1;
+            min-width: 180px;
+        }
+        button:hover {
+            background: #2563eb;
+        }
+        button:active {
+            transform: scale(0.98);
+        }
+        .teste {
+            padding: 15px;
+            margin: 15px 0;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .sucesso {
+            background: #d4edda;
+            border-color: #c3e6cb;
+            border-left: 4px solid #28a745;
+        }
+        .erro {
+            background: #f8d7da;
+            border-color: #f5c6cb;
+            border-left: 4px solid #dc3545;
+        }
+        .teste h3 {
+            margin-top: 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .tempo {
+            font-size: 12px;
+            color: #666;
+            background: #f8f9fa;
+            padding: 2px 8px;
+            border-radius: 3px;
+        }
+        pre {
+            background: #f4f4f4;
+            padding: 12px;
+            overflow-x: auto;
+            font-size: 12px;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        #resultados {
+            margin-top: 30px;
+        }
+        .limpar {
+            background: #6c757d;
+            padding: 8px 16px;
+            font-size: 13px;
+        }
+        .limpar:hover {
+            background: #5a6268;
+        }
+        .resumo {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        .card-resumo {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        .card-resumo .numero {
+            font-size: 32px;
+            font-weight: bold;
+            color: #3388ff;
+        }
+        .card-resumo .label {
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🧪 Teste API PostgreSQL + PostGIS</h1>
+
+    <div class="info">
+        <strong>🎯 Objetivo:</strong> Testar todos os endpoints da API antes de usar no mapa principal.<br>
+        <strong>🌐 URL Base:</strong> <code>http://localhost:3001/api</code><br>
+        <strong>📊 Servidor:</strong> PostgreSQL 16.4 + PostGIS 3.4.3
+    </div>
+
+    <div class="resumo" id="resumo" style="display: none;">
+        <div class="card-resumo">
+            <div class="numero" id="total-testes">0</div>
+            <div class="label">Testes Executados</div>
+        </div>
+        <div class="card-resumo">
+            <div class="numero" style="color: #28a745;" id="total-sucesso">0</div>
+            <div class="label">Sucesso</div>
+        </div>
+        <div class="card-resumo">
+            <div class="numero" style="color: #dc3545;" id="total-erro">0</div>
+            <div class="label">Erros</div>
+        </div>
+        <div class="card-resumo">
+            <div class="numero" id="tempo-total">0ms</div>
+            <div class="label">Tempo Total</div>
+        </div>
+    </div>
+
+    <div class="botoes">
+        <button onclick="testarHealth()">1️⃣ Health Check</button>
+        <button onclick="testarEstatisticas()">2️⃣ Estatísticas</button>
+        <button onclick="testarMarcos()">3️⃣ Listar Marcos</button>
+        <button onclick="testarGeoJSON()">4️⃣ GeoJSON</button>
+        <button onclick="testarRaio()">5️⃣ Busca por Raio</button>
+        <button onclick="testarBBox()">6️⃣ Busca por BBox</button>
+        <button onclick="testarTodos()" style="background: #28a745;">▶️ Executar Todos</button>
+        <button onclick="limparResultados()" class="limpar">🗑️ Limpar</button>
+    </div>
+
+    <div id="resultados"></div>
+
+    <script>
+        const API_BASE = 'http://localhost:3001/api';
+        let totalTestes = 0;
+        let totalSucesso = 0;
+        let totalErro = 0;
+        let tempoAcumulado = 0;
+
+        function atualizarResumo() {
+            document.getElementById('resumo').style.display = 'grid';
+            document.getElementById('total-testes').textContent = totalTestes;
+            document.getElementById('total-sucesso').textContent = totalSucesso;
+            document.getElementById('total-erro').textContent = totalErro;
+            document.getElementById('tempo-total').textContent = `${tempoAcumulado}ms`;
+        }
+
+        function mostrarResultado(titulo, sucesso, dados, tempo) {
+            totalTestes++;
+            if (sucesso) totalSucesso++;
+            else totalErro++;
+            tempoAcumulado += tempo;
+            atualizarResumo();
+
+            const div = document.createElement('div');
+            div.className = `teste ${sucesso ? 'sucesso' : 'erro'}`;
+            div.innerHTML = `
+                <h3>
+                    ${sucesso ? '✅' : '❌'} ${titulo}
+                    <span class="tempo">${tempo}ms</span>
+                </h3>
+                <pre>${JSON.stringify(dados, null, 2)}</pre>
+            `;
+            document.getElementById('resultados').insertBefore(div, document.getElementById('resultados').firstChild);
+        }
+
+        async function testarHealth() {
+            const inicio = Date.now();
+            try {
+                const response = await fetch(`${API_BASE}/health`);
+                const data = await response.json();
+                const tempo = Date.now() - inicio;
+                mostrarResultado('Health Check', response.ok, data, tempo);
+            } catch (error) {
+                const tempo = Date.now() - inicio;
+                mostrarResultado('Health Check', false, { error: error.message }, tempo);
+            }
+        }
+
+        async function testarEstatisticas() {
+            const inicio = Date.now();
+            try {
+                const response = await fetch(`${API_BASE}/estatisticas`);
+                const data = await response.json();
+                const tempo = Date.now() - inicio;
+                mostrarResultado('Estatísticas', response.ok, data, tempo);
+            } catch (error) {
+                const tempo = Date.now() - inicio;
+                mostrarResultado('Estatísticas', false, { error: error.message }, tempo);
+            }
+        }
+
+        async function testarMarcos() {
+            const inicio = Date.now();
+            try {
+                const response = await fetch(`${API_BASE}/marcos?limite=5`);
+                const data = await response.json();
+                const tempo = Date.now() - inicio;
+                mostrarResultado('Listar Marcos (5 primeiros)', response.ok, {
+                    total: data.total,
+                    levantados: data.levantados,
+                    pendentes: data.pendentes,
+                    retornados: data.data.length,
+                    exemplo: data.data[0]
+                }, tempo);
+            } catch (error) {
+                const tempo = Date.now() - inicio;
+                mostrarResultado('Listar Marcos', false, { error: error.message }, tempo);
+            }
+        }
+
+        async function testarGeoJSON() {
+            const inicio = Date.now();
+            try {
+                const response = await fetch(`${API_BASE}/marcos/geojson?limite=10`);
+                const data = await response.json();
+                const tempo = Date.now() - inicio;
+                mostrarResultado('GeoJSON Collection', response.ok, {
+                    type: data.type,
+                    total_features: data.features.length,
+                    exemplo_feature: data.features[0]
+                }, tempo);
+            } catch (error) {
+                const tempo = Date.now() - inicio;
+                mostrarResultado('GeoJSON', false, { error: error.message }, tempo);
+            }
+        }
+
+        async function testarRaio() {
+            const inicio = Date.now();
+            try {
+                // Londrina: -25.4245693, -49.6158113, raio 5km
+                const response = await fetch(`${API_BASE}/marcos/raio/-25.4245693/-49.6158113/5000`);
+                const data = await response.json();
+                const tempo = Date.now() - inicio;
+                mostrarResultado('Busca por Raio (5km de Londrina)', response.ok, {
+                    centro: data.centro,
+                    raio_metros: data.raio_metros,
+                    total_encontrados: data.total_encontrados,
+                    primeiros_3: data.marcos.slice(0, 3).map(m => ({
+                        codigo: m.codigo,
+                        tipo: m.tipo,
+                        municipio: m.municipio,
+                        distancia_metros: m.distancia_metros
+                    }))
+                }, tempo);
+            } catch (error) {
+                const tempo = Date.now() - inicio;
+                mostrarResultado('Busca por Raio', false, { error: error.message }, tempo);
+            }
+        }
+
+        async function testarBBox() {
+            const inicio = Date.now();
+            try {
+                // Paraná aproximado
+                const response = await fetch(`${API_BASE}/marcos/bbox?minLat=-27&minLng=-55&maxLat=-22&maxLng=-48`);
+                const data = await response.json();
+                const tempo = Date.now() - inicio;
+                mostrarResultado('Busca por BBox (Paraná)', response.ok, {
+                    bbox: data.bbox,
+                    total_encontrados: data.total_encontrados,
+                    primeiros_3: data.marcos.slice(0, 3)
+                }, tempo);
+            } catch (error) {
+                const tempo = Date.now() - inicio;
+                mostrarResultado('Busca por BBox', false, { error: error.message }, tempo);
+            }
+        }
+
+        async function testarTodos() {
+            limparResultados();
+            console.log('🚀 Executando todos os testes...');
+
+            await testarHealth();
+            await new Promise(r => setTimeout(r, 100));
+
+            await testarEstatisticas();
+            await new Promise(r => setTimeout(r, 100));
+
+            await testarMarcos();
+            await new Promise(r => setTimeout(r, 100));
+
+            await testarGeoJSON();
+            await new Promise(r => setTimeout(r, 100));
+
+            await testarRaio();
+            await new Promise(r => setTimeout(r, 100));
+
+            await testarBBox();
+
+            console.log('✅ Todos os testes concluídos!');
+        }
+
+        function limparResultados() {
+            document.getElementById('resultados').innerHTML = '';
+            totalTestes = 0;
+            totalSucesso = 0;
+            totalErro = 0;
+            tempoAcumulado = 0;
+            document.getElementById('resumo').style.display = 'none';
+        }
+
+        // Executar teste inicial ao carregar
+        window.addEventListener('load', () => {
+            console.log('🧪 Página de teste carregada');
+            console.log('💡 Dica: Clique em "Executar Todos" para testar tudo de uma vez');
+        });
+    </script>
+</body>
+</html>

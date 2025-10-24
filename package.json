@@ -15,7 +15,9 @@
     "validate:pg": "node backend/scripts/validar-migracao.js",
     "test:api": "node backend/scripts/testar-api-postgres.js",
     "db:reset": "node backend/reset-database.js",
-    "db:clean": "node backend/clean-migrations.js"
+    "db:clean": "node backend/clean-migrations.js",
+    "debug": "node playwright-debug-config.js",
+    "debug:headless": "set HEADLESS=true && node playwright-debug-config.js"
   },
   "keywords": [
     "geodesia",
@@ -36,6 +38,7 @@
     "mammoth": "^1.11.0",
     "multer": "^1.4.5-lts.1",
     "pg": "^8.16.3",
+    "playwright": "^1.56.1",
     "proj4": "^2.19.10",
     "supercluster": "^8.0.1",
     "xlsx": "^0.18.5"

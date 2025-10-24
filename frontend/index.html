@@ -4,7 +4,20 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sistema de Marcos Geodésicos e Propriedades</title>
+
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <!-- Design System -->
+    <link rel="stylesheet" href="styles/design-system.css">
+    <link rel="stylesheet" href="styles/components.css">
+    <link rel="stylesheet" href="styles/animations.css">
+    <link rel="stylesheet" href="styles/layout.css">
+
+    <!-- Estilos Antigos (temporário) -->
     <link rel="stylesheet" href="styles.css">
+
+    <!-- Leaflet -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/proj4@2.9.2/dist/proj4.js"></script>
@@ -518,6 +531,11 @@
                 }
             }, 1000);
         });
+    </script>
+
+    <!-- Inicializar Lucide Icons -->
+    <script>
+        lucide.createIcons();
     </script>
 </body>
 </html>

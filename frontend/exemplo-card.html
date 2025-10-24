@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Exemplo - Card de Marco Geodésico</title>
+
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <!-- Design System -->
+    <link rel="stylesheet" href="styles/design-system.css">
+    <link rel="stylesheet" href="styles/components.css">
+    <link rel="stylesheet" href="styles/animations.css">
+</head>
+<body style="padding: 40px; background-color: var(--gray-50);">
+
+    <div class="container" style="max-width: 800px;">
+        <h1 class="text-3xl font-bold" style="margin-bottom: var(--spacing-6); color: var(--cogep-green-primary);">
+            <i data-lucide="map-pin" style="width: 32px; height: 32px; display: inline-block; vertical-align: middle;"></i>
+            Exemplo - Cards de Marco Geodésico
+        </h1>
+
+        <div class="grid grid-cols-2 gap-4">
+
+            <!-- Card Tipo V (Vértice) -->
+            <div class="marco-card animate-fade-in-up">
+                <div class="marco-card-header">
+                    <div class="marco-card-title">
+                        <i data-lucide="triangle" style="width: 20px; height: 20px; color: var(--cogep-green-primary);"></i>
+                        V-001
+                    </div>
+                    <span class="badge tipo-v">
+                        <i data-lucide="triangle" style="width: 12px; height: 12px;"></i>
+                        Vértice
+                    </span>
+                </div>
+
+                <div class="marco-card-body">
+                    <div class="marco-card-info">
+                        <i data-lucide="building-2"></i>
+                        <span>Edifício Central - Sala 105</span>
+                    </div>
+
+                    <div class="marco-card-info">
+                        <i data-lucide="calendar"></i>
+                        <span>Levantado em: 15/03/2024</span>
+                    </div>
+
+                    <div class="marco-card-info">
+                        <i data-lucide="check-circle" style="color: var(--success);"></i>
+                        <span style="color: var(--success); font-weight: 500;">Validado</span>
+                    </div>
+
+                    <div class="marco-card-coordinates">
+                        <div style="margin-bottom: 4px;">
+                            <strong>E:</strong> 687.234,56 m
+                        </div>
+                        <div>
+                            <strong>N:</strong> 7.123.456,78 m
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Card Tipo M (Referência de Nível) -->
+            <div class="marco-card animate-fade-in-up" style="animation-delay: 100ms;">
+                <div class="marco-card-header">
+                    <div class="marco-card-title">
+                        <i data-lucide="milestone" style="width: 20px; height: 20px; color: var(--cogep-green-primary);"></i>
+                        M-042
+                    </div>
+                    <span class="badge tipo-m">
+                        <i data-lucide="milestone" style="width: 12px; height: 12px;"></i>
+                        RN
+                    </span>
+                </div>
+
+                <div class="marco-card-body">
+                    <div class="marco-card-info">
+                        <i data-lucide="building-2"></i>
+                        <span>Torre Norte - Subsolo</span>
+                    </div>
+
+                    <div class="marco-card-info">
+                        <i data-lucide="calendar"></i>
+                        <span>Levantado em: 20/03/2024</span>
+                    </div>
+
+                    <div class="marco-card-info">
+                        <i data-lucide="alert-circle" style="color: var(--warning);"></i>
+                        <span style="color: var(--warning); font-weight: 500;">Pendente Revisão</span>
+                    </div>
+
+                    <div class="marco-card-coordinates">
+                        <div style="margin-bottom: 4px;">
+                            <strong>E:</strong> 687.412,89 m
+                        </div>
+                        <div>
+                            <strong>N:</strong> 7.123.789,01 m
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Card Tipo P (Ponto Auxiliar) -->
+            <div class="marco-card animate-fade-in-up" style="animation-delay: 200ms;">
+                <div class="marco-card-header">
+                    <div class="marco-card-title">
+                        <i data-lucide="circle-dot" style="width: 20px; height: 20px; color: var(--cogep-green-primary);"></i>
+                        P-089
+                    </div>
+                    <span class="badge tipo-p">
+                        <i data-lucide="circle-dot" style="width: 12px; height: 12px;"></i>
+                        Auxiliar
+                    </span>
+                </div>
+
+                <div class="marco-card-body">
+                    <div class="marco-card-info">
+                        <i data-lucide="building-2"></i>
+                        <span>Área Externa - Jardim</span>
+                    </div>
+
+                    <div class="marco-card-info">
+                        <i data-lucide="calendar"></i>
+                        <span>Levantado em: 25/03/2024</span>
+                    </div>
+
+                    <div class="marco-card-info">
+                        <i data-lucide="check-circle" style="color: var(--success);"></i>
+                        <span style="color: var(--success); font-weight: 500;">Validado</span>
+                    </div>
+
+                    <div class="marco-card-coordinates">
+                        <div style="margin-bottom: 4px;">
+                            <strong>E:</strong> 687.567,12 m
+                        </div>
+                        <div>
+                            <strong>N:</strong> 7.124.012,34 m
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Exemplo de Card com Erro -->
+            <div class="marco-card animate-fade-in-up" style="animation-delay: 300ms; border-color: var(--error-light);">
+                <div class="marco-card-header">
+                    <div class="marco-card-title">
+                        <i data-lucide="triangle" style="width: 20px; height: 20px; color: var(--error);"></i>
+                        V-015
+                    </div>
+                    <span class="badge badge-error">
+                        <i data-lucide="x-circle" style="width: 12px; height: 12px;"></i>
+                        Erro
+                    </span>
+                </div>
+
+                <div class="marco-card-body">
+                    <div class="marco-card-info">
+                        <i data-lucide="building-2"></i>
+                        <span>Coordenadas Inválidas</span>
+                    </div>
+
+                    <div class="marco-card-info">
+                        <i data-lucide="alert-triangle" style="color: var(--error);"></i>
+                        <span style="color: var(--error); font-weight: 500;">Requer Correção</span>
+                    </div>
+
+                    <div style="padding: var(--spacing-3); background-color: var(--error-light); border-radius: var(--radius-sm); margin-top: var(--spacing-2);">
+                        <p class="text-sm" style="color: var(--error); margin: 0;">
+                            <i data-lucide="info" style="width: 14px; height: 14px; display: inline-block; vertical-align: middle;"></i>
+                            Coordenadas fora da área válida
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Seção de Botões -->
+        <div style="margin-top: var(--spacing-8);">
+            <h2 class="text-2xl font-semibold" style="margin-bottom: var(--spacing-4);">Botões</h2>
+
+            <div style="display: flex; gap: var(--spacing-3); flex-wrap: wrap;">
+                <button class="btn btn-primary">
+                    <i data-lucide="plus" style="width: 16px; height: 16px;"></i>
+                    Novo Marco
+                </button>
+
+                <button class="btn btn-secondary">
+                    <i data-lucide="filter" style="width: 16px; height: 16px;"></i>
+                    Filtrar
+                </button>
+
+                <button class="btn btn-ghost">
+                    <i data-lucide="download" style="width: 16px; height: 16px;"></i>
+                    Exportar
+                </button>
+
+                <button class="btn btn-danger btn-sm">
+                    <i data-lucide="trash-2" style="width: 14px; height: 14px;"></i>
+                    Excluir
+                </button>
+
+                <button class="btn btn-primary" disabled>
+                    <i data-lucide="loader-2" class="animate-spin" style="width: 16px; height: 16px;"></i>
+                    Carregando...
+                </button>
+            </div>
+        </div>
+
+        <!-- Seção de Inputs -->
+        <div style="margin-top: var(--spacing-8);">
+            <h2 class="text-2xl font-semibold" style="margin-bottom: var(--spacing-4);">Campos de Busca</h2>
+
+            <div class="form-group">
+                <label class="form-label">Buscar Marco</label>
+                <input type="text" class="form-input search-input" placeholder="Digite o ID ou localização...">
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Coordenada E (m)</label>
+                <input type="text" class="form-input" placeholder="687.234,56">
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Inicializar Lucide Icons -->
+    <script>
+        lucide.createIcons();
+    </script>
+
+</body>
+</html>

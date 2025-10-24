@@ -15,7 +15,7 @@ async function importar() {
 
     const client = new Client({
         host: 'localhost',
-        port: 5433,
+        port: 5434,
         database: 'marcos_geodesicos',
         user: 'postgres',
         password: 'marcos123'

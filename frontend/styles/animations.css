@@ -1,0 +1,114 @@
+/**
+ * COGEP Animations
+ * Micro-interações e animações sutis
+ */
+
+/* ========================================
+   KEYFRAMES
+   ======================================== */
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeInDown {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ========================================
+   ANIMATION UTILITIES
+   ======================================== */
+
+.animate-fade-in {
+  animation: fadeIn var(--transition-base) ease-in-out;
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp var(--transition-slow) ease-out;
+}
+
+.animate-fade-in-down {
+  animation: fadeInDown var(--transition-slow) ease-out;
+}
+
+.animate-slide-in-right {
+  animation: slideInRight var(--transition-slow) ease-out;
+}
+
+.animate-pulse {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+/* ========================================
+   HOVER EFFECTS
+   ======================================== */
+
+.hover-lift {
+  transition: transform var(--transition-base);
+}
+
+.hover-lift:hover {
+  transform: translateY(-2px);
+}
+
+.hover-scale {
+  transition: transform var(--transition-base);
+}
+
+.hover-scale:hover {
+  transform: scale(1.05);
+}

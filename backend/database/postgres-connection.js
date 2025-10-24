@@ -3,7 +3,7 @@ require('dotenv').config();
 
 const pool = new Pool({
     host: process.env.POSTGRES_HOST || 'localhost',
-    port: process.env.POSTGRES_PORT || 5433,
+    port: process.env.POSTGRES_PORT || 5434,
     database: process.env.POSTGRES_DB || 'marcos_geodesicos',
     user: process.env.POSTGRES_USER || 'postgres',
     password: process.env.POSTGRES_PASSWORD || 'marcos123',
@@ -13,7 +13,7 @@ const pool = new Pool({
 });
 
 pool.on('connect', () => {
-    console.log('🐘 PostgreSQL: Nova conexão no pool');
+    console.log('🐘 PostgreSQL: Nova conexão estabelecida (porta 5434)');
 });
 
 pool.on('error', (err) => {
@@ -57,7 +57,8 @@ async function healthCheck() {
         return {
             status: 'OK',
             timestamp: result.rows[0].time,
-            version: result.rows[0].version.split(',')[0]
+            version: result.rows[0].version.split(',')[0],
+            port: process.env.POSTGRES_PORT || 5434
         };
     } catch (error) {
         return {

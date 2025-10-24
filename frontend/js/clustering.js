@@ -35,21 +35,38 @@ class ClusterManager {
   }
 
   initCluster() {
-    this.cluster = new Supercluster({
-      radius: 75,          // raio de agrupamento em pixels
-      maxZoom: 18,         // máximo zoom para criar clusters
-      minZoom: 0,          // mínimo zoom
-      minPoints: 2,        // mínimo de pontos para formar cluster
-      extent: 512,         // tile extent
-      nodeSize: 64         // tamanho do nó da árvore
-    });
+    // Verificar se Supercluster está disponível
+    if (typeof Supercluster === 'undefined') {
+      console.error('❌ Supercluster não está carregado! Verifique se o script foi incluído.');
+      return;
+    }
 
-    console.log('✅ Supercluster inicializado');
+    try {
+      this.cluster = new Supercluster({
+        radius: 75,          // raio de agrupamento em pixels
+        maxZoom: 18,         // máximo zoom para criar clusters
+        minZoom: 0,          // mínimo zoom
+        minPoints: 2,        // mínimo de pontos para formar cluster
+        extent: 512,         // tile extent
+        nodeSize: 64         // tamanho do nó da árvore
+      });
+
+      console.log('✅ Supercluster inicializado');
+    } catch (error) {
+      console.error('❌ Erro ao inicializar Supercluster:', error);
+      this.cluster = null;
+    }
   }
 
   loadData(geojson) {
     if (!geojson || !geojson.features) {
       console.error('❌ GeoJSON inválido');
+      return;
+    }
+
+    // Verificar se cluster está inicializado
+    if (!this.cluster) {
+      console.error('❌ Supercluster não está inicializado. Não é possível carregar dados.');
       return;
     }
 
@@ -63,6 +80,18 @@ class ClusterManager {
   }
 
   updateClusters() {
+    // Verificar se cluster está inicializado e tem dados
+    if (!this.cluster) {
+      console.warn('⚠️  Supercluster não está inicializado. Ignorando updateClusters()');
+      return;
+    }
+
+    // Verificar se há dados carregados (points é um array interno do Supercluster)
+    if (!this.cluster.points || this.cluster.points.length === 0) {
+      console.warn('⚠️  Nenhum dado carregado no Supercluster. Ignorando updateClusters()');
+      return;
+    }
+
     // Limpar markers atuais
     this.markers.clearLayers();
 

@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>COGEP - Design Premium</title>
+
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <!-- Design System Premium -->
+    <link rel="stylesheet" href="styles/design-system.css">
+    <link rel="stylesheet" href="styles/components.css">
+    <link rel="stylesheet" href="styles/animations.css">
+</head>
+<body>
+
+    <div style="display: flex; min-height: 100vh;">
+
+        <!-- SIDEBAR -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <a href="#" class="sidebar-logo">
+                    <i data-lucide="map-pin"></i>
+                    <span class="sidebar-logo-text">COGEP</span>
+                </a>
+            </div>
+
+            <nav class="sidebar-nav">
+                <a href="#" class="nav-link">
+                    <i data-lucide="layout-dashboard"></i>
+                    <span>Dashboard</span>
+                </a>
+                <a href="#" class="nav-link active">
+                    <i data-lucide="map"></i>
+                    <span>Mapa</span>
+                </a>
+                <a href="#" class="nav-link">
+                    <i data-lucide="map-pin"></i>
+                    <span>Marcos</span>
+                </a>
+                <a href="#" class="nav-link">
+                    <i data-lucide="file-text"></i>
+                    <span>Relatórios</span>
+                </a>
+                <a href="#" class="nav-link">
+                    <i data-lucide="settings"></i>
+                    <span>Configurações</span>
+                </a>
+            </nav>
+
+            <div style="padding: var(--space-4); border-top: 1px solid var(--border-primary);">
+                <button class="theme-toggle" onclick="toggleTheme()">
+                    <i data-lucide="moon" id="theme-icon"></i>
+                </button>
+            </div>
+        </aside>
+
+        <!-- MAIN CONTENT -->
+        <main style="flex: 1; margin-left: var(--sidebar-width); padding: var(--space-8); background-color: var(--bg-primary);">
+
+            <div style="max-width: 1200px; margin: 0 auto;">
+
+                <!-- HEADER -->
+                <header style="margin-bottom: var(--space-8);">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-4);">
+                        <h1 style="font-size: var(--text-4xl); font-weight: var(--weight-heavy); color: var(--text-primary); letter-spacing: -1px;">
+                            Marcos Geodésicos
+                        </h1>
+                        <div style="display: flex; gap: var(--space-3);">
+                            <button class="btn btn-secondary">
+                                <i data-lucide="filter" style="width: 18px; height: 18px;"></i>
+                                Filtrar
+                            </button>
+                            <button class="btn btn-primary">
+                                <i data-lucide="plus" style="width: 18px; height: 18px;"></i>
+                                Novo Marco
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- SEARCH -->
+                    <div class="search-wrapper" style="max-width: 500px;">
+                        <i data-lucide="search" class="search-icon"></i>
+                        <input type="text" class="input input-search" placeholder="Buscar marcos...">
+                    </div>
+                </header>
+
+                <!-- CARDS GRID -->
+                <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(450px, 1fr)); gap: var(--space-4);">
+
+                    <!-- CARD 1: Vértice -->
+                    <div class="marco-card animate-fade-in-up">
+                        <div class="marco-card-header">
+                            <div class="marco-card-id">
+                                <i data-lucide="triangle"></i>
+                                V-001
+                            </div>
+                            <span class="marco-badge badge-vertice">
+                                <i data-lucide="triangle"></i>
+                                Vértice
+                            </span>
+                        </div>
+
+                        <div class="marco-card-body">
+                            <div class="marco-info-row">
+                                <i data-lucide="building-2"></i>
+                                <span>Edifício Central - Sala 105</span>
+                            </div>
+
+                            <div class="marco-info-row">
+                                <i data-lucide="calendar"></i>
+                                <span>Levantado em <strong>15/03/2024</strong></span>
+                            </div>
+
+                            <div class="marco-info-row">
+                                <i data-lucide="check-circle"></i>
+                                <span class="marco-status status-validado">
+                                    <strong>Validado</strong>
+                                </span>
+                            </div>
+
+                            <div class="marco-coordinates">
+                                <div>
+                                    <span><strong>E:</strong> 687.234,56 m</span>
+                                </div>
+                                <div>
+                                    <span><strong>N:</strong> 7.123.456,78 m</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- CARD 2: RN -->
+                    <div class="marco-card animate-fade-in-up" style="animation-delay: 0.05s;">
+                        <div class="marco-card-header">
+                            <div class="marco-card-id">
+                                <i data-lucide="milestone"></i>
+                                M-042
+                            </div>
+                            <span class="marco-badge badge-rn">
+                                <i data-lucide="milestone"></i>
+                                RN
+                            </span>
+                        </div>
+
+                        <div class="marco-card-body">
+                            <div class="marco-info-row">
+                                <i data-lucide="building-2"></i>
+                                <span>Torre Norte - Subsolo</span>
+                            </div>
+
+                            <div class="marco-info-row">
+                                <i data-lucide="calendar"></i>
+                                <span>Levantado em <strong>20/03/2024</strong></span>
+                            </div>
+
+                            <div class="marco-info-row">
+                                <i data-lucide="alert-circle"></i>
+                                <span class="marco-status status-pendente">
+                                    <strong>Pendente Revisão</strong>
+                                </span>
+                            </div>
+
+                            <div class="marco-coordinates">
+                                <div>
+                                    <span><strong>E:</strong> 687.412,89 m</span>
+                                </div>
+                                <div>
+                                    <span><strong>N:</strong> 7.123.789,01 m</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- CARD 3: Auxiliar -->
+                    <div class="marco-card animate-fade-in-up" style="animation-delay: 0.1s;">
+                        <div class="marco-card-header">
+                            <div class="marco-card-id">
+                                <i data-lucide="circle-dot"></i>
+                                P-089
+                            </div>
+                            <span class="marco-badge badge-auxiliar">
+                                <i data-lucide="circle-dot"></i>
+                                Auxiliar
+                            </span>
+                        </div>
+
+                        <div class="marco-card-body">
+                            <div class="marco-info-row">
+                                <i data-lucide="building-2"></i>
+                                <span>Área Externa - Jardim</span>
+                            </div>
+
+                            <div class="marco-info-row">
+                                <i data-lucide="calendar"></i>
+                                <span>Levantado em <strong>25/03/2024</strong></span>
+                            </div>
+
+                            <div class="marco-info-row">
+                                <i data-lucide="check-circle"></i>
+                                <span class="marco-status status-validado">
+                                    <strong>Validado</strong>
+                                </span>
+                            </div>
+
+                            <div class="marco-coordinates">
+                                <div>
+                                    <span><strong>E:</strong> 687.567,12 m</span>
+                                </div>
+                                <div>
+                                    <span><strong>N:</strong> 7.124.012,34 m</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- CARD 4: Erro -->
+                    <div class="marco-card animate-fade-in-up" style="animation-delay: 0.15s;">
+                        <div class="marco-card-header">
+                            <div class="marco-card-id">
+                                <i data-lucide="triangle"></i>
+                                V-015
+                            </div>
+                            <span class="marco-badge badge-erro">
+                                <i data-lucide="x-circle"></i>
+                                Erro
+                            </span>
+                        </div>
+
+                        <div class="marco-card-body">
+                            <div class="marco-info-row">
+                                <i data-lucide="building-2"></i>
+                                <span>Coordenadas Inválidas</span>
+                            </div>
+
+                            <div class="marco-info-row">
+                                <i data-lucide="alert-triangle"></i>
+                                <span class="marco-status status-erro">
+                                    <strong>Requer Correção</strong>
+                                </span>
+                            </div>
+
+                            <div class="marco-alert">
+                                <i data-lucide="alert-triangle"></i>
+                                <p>Coordenadas fora da área válida. Verificar levantamento original.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+
+            </div>
+
+        </main>
+
+    </div>
+
+    <!-- SCRIPTS -->
+    <script>
+        // Inicializar Lucide Icons
+        lucide.createIcons();
+
+        // Toggle Theme
+        function toggleTheme() {
+            const html = document.documentElement;
+            const currentTheme = html.getAttribute('data-theme');
+            const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+
+            html.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+
+            // Update icon
+            const icon = document.getElementById('theme-icon');
+            icon.setAttribute('data-lucide', newTheme === 'light' ? 'moon' : 'sun');
+            lucide.createIcons();
+        }
+
+        // Load saved theme
+        const savedTheme = localStorage.getItem('theme') || 'light';
+        document.documentElement.setAttribute('data-theme', savedTheme);
+
+        // Update icon on load
+        const icon = document.getElementById('theme-icon');
+        icon.setAttribute('data-lucide', savedTheme === 'light' ? 'moon' : 'sun');
+        lucide.createIcons();
+    </script>
+
+</body>
+</html>

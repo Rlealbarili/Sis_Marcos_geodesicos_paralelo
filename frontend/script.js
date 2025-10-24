@@ -2,6 +2,11 @@
 const API_URL = 'http://localhost:3001';  // PostgreSQL + PostGIS API
 let marcoAtual = null;
 
+// Variáveis do Supercluster (NOVO SISTEMA POSTGRESQL)
+let supercluster = null;
+let marcosFeatures = [];
+let marcadoresLayer = null;
+
 // =========================================
 // DEFINIÇÃO EPSG:31982 - SIRGAS 2000 UTM Zone 22S
 // =========================================
@@ -16,36 +21,65 @@ console.log('✅ EPSG:31982 definido:', proj4.defs('EPSG:31982'));
 // INICIALIZAÇÃO DO SISTEMA
 // ==========================================
 
-// Inicializar quando o DOM estiver pronto
+// Função async para inicializar o sistema (NOVO SISTEMA POSTGRESQL)
+async function inicializarSistema() {
+    console.log('🚀 INICIALIZANDO SISTEMA...');
+
+    try {
+        // 1. Inicializar mapa
+        inicializarMapa();
+
+        // 2. Inicializar Supercluster (ANTES de carregar marcos!)
+        if (typeof Supercluster !== 'undefined') {
+            supercluster = new Supercluster({
+                radius: 60,
+                maxZoom: 16,
+                minZoom: 0,
+                minPoints: 2
+            });
+            console.log('✅ Supercluster inicializado');
+        } else {
+            throw new Error('❌ Biblioteca Supercluster não carregada');
+        }
+
+        // 3. Aguardar 2s para mapa carregar
+        console.log('⏳ Aguardando mapa...');
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
+        // 4. Carregar marcos do PostgreSQL
+        console.log('📥 Carregando marcos...');
+        await carregarMarcos();
+
+        // 5. Iniciar atualização automática das estatísticas (a cada 30s)
+        iniciarAtualizacaoAutomatica();
+
+        // 6. Configurar listeners de arquivo
+        configurarListenersArquivo();
+
+        // 7. Aba inicial
+        trocarAba('mapa');
+
+        // Legacy: Solicitar nome do usuário
+        let userName = localStorage.getItem('userName');
+        if (!userName) {
+            userName = prompt('Digite seu nome:') || 'Usuário';
+            localStorage.setItem('userName', userName);
+        }
+        if (document.getElementById('userName')) {
+            document.getElementById('userName').textContent = userName;
+        }
+
+        console.log('✅ SISTEMA INICIALIZADO!');
+
+    } catch (erro) {
+        console.error('❌ ERRO AO INICIALIZAR SISTEMA:', erro);
+        alert('Erro ao inicializar sistema: ' + erro.message);
+    }
+}
+
+// Chamar ao carregar página
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('🚀 Inicializando Sistema de Marcos Geodésicos...');
-
-    // 1. Inicializar mapa
-    inicializarMapa();
-
-    // 2. Iniciar atualização automática das estatísticas (a cada 30s)
-    iniciarAtualizacaoAutomatica();
-
-    // 3. Carregar clientes para filtros
-    carregarClientesParaFiltros();
-
-    // 4. Configurar listeners de arquivo
-    configurarListenersArquivo();
-
-    // 5. Aba inicial
-    trocarAba('mapa');
-
-    // Legacy: Solicitar nome do usuário
-    let userName = localStorage.getItem('userName');
-    if (!userName) {
-        userName = prompt('Digite seu nome:') || 'Usuário';
-        localStorage.setItem('userName', userName);
-    }
-    if (document.getElementById('userName')) {
-        document.getElementById('userName').textContent = userName;
-    }
-
-    console.log('✅ Sistema inicializado com sucesso!');
+    inicializarSistema();
 });
 
 // Navegação entre Tabs
@@ -536,9 +570,9 @@ let poligonoEmCriacao = null;
 let pontosPoligono = [];
 
 // Camadas do mapa
-let propriedadesRuraisLayer;
-let propriedadesUrbanasLayer;
-let propriedadesLoteamentoLayer;
+let propriedadesRuraisLayer = null;
+let propriedadesUrbanasLayer = null;
+let propriedadesLoteamentoLayer = null;
 let layerControl;
 
 // Dados
@@ -645,14 +679,26 @@ function inicializarMapa() {
         }, 500);
 
         setTimeout(() => {
-            console.log('Carregando propriedades...');
-            carregarPropriedades();
-        }, 1500);
-
-        setTimeout(() => {
             console.log('Criando controle de camadas...');
             criarControleCamadas();
-        }, 2500);
+        }, 1500);
+
+        // Atualizar marcadores quando mover/zoom (NOVO SISTEMA POSTGRESQL)
+        map.on('moveend', () => {
+            console.log('🗺️  Mapa movido');
+            if (window.marcosFeatures && window.marcosFeatures.length > 0) {
+                atualizarMarcadores();
+            }
+        });
+
+        map.on('zoomend', () => {
+            console.log('🔍 Zoom alterado');
+            if (window.marcosFeatures && window.marcosFeatures.length > 0) {
+                atualizarMarcadores();
+            }
+        });
+
+        console.log('✅ Listeners de mapa configurados');
 
     } catch (error) {
         console.error('❌ Erro ao criar mapa:', error);
@@ -925,149 +971,6 @@ async function carregarPoligonosNoMapa() {
     }
 }
 
-// ==========================================
-// CARREGAR PROPRIEDADES
-// ==========================================
-async function carregarPropriedades() {
-    try {
-        console.log('Carregando propriedades do banco...');
-
-        const response = await fetch('/api/propriedades-mapa');
-        const result = await response.json();
-
-        if (!result.success) {
-            throw new Error(result.message);
-        }
-
-        console.log(`✅ ${result.total} propriedades encontradas`);
-
-        if (result.total === 0) {
-            console.log('⚠️ Nenhuma propriedade cadastrada ainda');
-            return;
-        }
-
-        propriedadesData = result;
-
-        // Criar camadas por tipo
-        criarCamadasPropriedades(result.features);
-
-        console.log('✅ Camadas de propriedades criadas no mapa');
-
-    } catch (error) {
-        console.error('❌ Erro ao carregar propriedades:', error);
-    }
-}
-
-// ==========================================
-// CRIAR CAMADAS DE PROPRIEDADES
-// ==========================================
-function criarCamadasPropriedades(features) {
-    console.log('Criando camadas de propriedades...');
-
-    // Separar por tipo
-    const rurais = features.filter(f => f.properties.tipo === 'RURAL');
-    const urbanas = features.filter(f => f.properties.tipo === 'URBANO');
-    const loteamentos = features.filter(f => f.properties.tipo === 'LOTEAMENTO');
-
-    console.log(`  - Rural: ${rurais.length}`);
-    console.log(`  - Urbano: ${urbanas.length}`);
-    console.log(`  - Loteamento: ${loteamentos.length}`);
-
-    // Criar camada de propriedades rurais
-    propriedadesRuraisLayer = L.geoJSON(rurais, {
-        style: estilosPoligonos.RURAL,
-        onEachFeature: adicionarInteracoesPoligono
-    });
-
-    // Criar camada de propriedades urbanas
-    propriedadesUrbanasLayer = L.geoJSON(urbanas, {
-        style: estilosPoligonos.URBANO,
-        onEachFeature: adicionarInteracoesPoligono
-    });
-
-    // Criar camada de loteamentos
-    propriedadesLoteamentoLayer = L.geoJSON(loteamentos, {
-        style: estilosPoligonos.LOTEAMENTO,
-        onEachFeature: adicionarInteracoesPoligono
-    });
-
-    // Adicionar camadas ao mapa (inicialmente visíveis)
-    propriedadesRuraisLayer.addTo(map);
-    propriedadesUrbanasLayer.addTo(map);
-    propriedadesLoteamentoLayer.addTo(map);
-
-    console.log('✅ Camadas de propriedades criadas');
-}
-
-// ==========================================
-// ADICIONAR INTERAÇÕES AOS POLÍGONOS
-// ==========================================
-function adicionarInteracoesPoligono(feature, layer) {
-    const props = feature.properties;
-
-    // Criar popup
-    const popupContent = `
-        <div style="min-width: 250px;">
-            <h3 style="margin: 0 0 10px 0; color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 5px;">
-                ${props.nome_propriedade || 'Sem nome'}
-            </h3>
-
-            <div style="margin-bottom: 8px;">
-                <strong>📋 Matrícula:</strong> ${props.matricula}<br>
-                <strong>👤 Proprietário:</strong> ${props.cliente_nome}<br>
-                ${props.cliente_cpf_cnpj ? `<strong>📄 CPF/CNPJ:</strong> ${props.cliente_cpf_cnpj}<br>` : ''}
-            </div>
-
-            <div style="margin-bottom: 8px;">
-                <strong>📍 Município:</strong> ${props.municipio || 'N/A'} - ${props.uf || 'N/A'}<br>
-                ${props.comarca ? `<strong>⚖️ Comarca:</strong> ${props.comarca}<br>` : ''}
-                <strong>🏷️ Tipo:</strong> <span style="background: ${getCorTipo(props.tipo)}; color: white; padding: 2px 8px; border-radius: 3px; font-size: 11px;">${props.tipo}</span>
-            </div>
-
-            <div style="background: #ecf0f1; padding: 8px; border-radius: 4px; margin-bottom: 8px;">
-                <strong>📐 Área:</strong> ${formatarArea(props.area_m2, props.tipo)}<br>
-                <strong>📏 Perímetro:</strong> ${props.perimetro_m ? props.perimetro_m.toLocaleString('pt-BR') + ' m' : 'N/A'}<br>
-                <strong>🔺 Vértices:</strong> ${props.total_vertices}
-            </div>
-
-            <div style="text-align: center; margin-top: 10px;">
-                <button onclick="verDetalhesPropriedade(${feature.id})"
-                        style="background: #3498db; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer; font-weight: 600;">
-                    📊 Ver Detalhes Completos
-                </button>
-            </div>
-        </div>
-    `;
-
-    layer.bindPopup(popupContent, {
-        maxWidth: 350,
-        className: 'popup-propriedade'
-    });
-
-    // Tooltip com nome (sempre visível ao passar mouse)
-    layer.bindTooltip(props.nome_propriedade || props.matricula, {
-        permanent: false,
-        direction: 'center',
-        className: 'tooltip-propriedade'
-    });
-
-    // Efeitos hover
-    layer.on({
-        mouseover: function(e) {
-            const layer = e.target;
-            layer.setStyle(estiloHover);
-            layer.bringToFront();
-        },
-        mouseout: function(e) {
-            const layer = e.target;
-            const tipo = feature.properties.tipo;
-            layer.setStyle(estilosPoligonos[tipo]);
-        },
-        click: function(e) {
-            map.fitBounds(e.target.getBounds(), { padding: [50, 50] });
-        }
-    });
-}
 
 // ==========================================
 // FUNÇÕES AUXILIARES
@@ -1244,6 +1147,20 @@ function verPropriedadeNoMapa(propriedadeId) {
 function criarControleCamadas() {
     console.log('Criando controle de camadas...');
 
+    // Inicializar camadas se ainda não existirem
+    if (!marcosLayer) {
+        marcosLayer = L.layerGroup().addTo(map);
+    }
+    if (!propriedadesRuraisLayer) {
+        propriedadesRuraisLayer = L.layerGroup();
+    }
+    if (!propriedadesUrbanasLayer) {
+        propriedadesUrbanasLayer = L.layerGroup();
+    }
+    if (!propriedadesLoteamentoLayer) {
+        propriedadesLoteamentoLayer = L.layerGroup();
+    }
+
     // Camadas base (tiles)
     const baseLayers = {
         "🗺️ Mapa Padrão": L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -1254,13 +1171,12 @@ function criarControleCamadas() {
         })
     };
 
-    // Camadas overlay (dados)
-    const overlayLayers = {
-        "📍 Marcos Geodésicos": marcosLayer,
-        "🌳 Propriedades Rurais": propriedadesRuraisLayer,
-        "🏢 Propriedades Urbanas": propriedadesUrbanasLayer,
-        "🏘️ Loteamentos": propriedadesLoteamentoLayer
-    };
+    // Camadas overlay (dados) - apenas incluir se existirem
+    const overlayLayers = {};
+    if (marcosLayer) overlayLayers["📍 Marcos Geodésicos"] = marcosLayer;
+    if (propriedadesRuraisLayer) overlayLayers["🌳 Propriedades Rurais"] = propriedadesRuraisLayer;
+    if (propriedadesUrbanasLayer) overlayLayers["🏢 Propriedades Urbanas"] = propriedadesUrbanasLayer;
+    if (propriedadesLoteamentoLayer) overlayLayers["🏘️ Loteamentos"] = propriedadesLoteamentoLayer;
 
     // Adicionar controle ao mapa
     layerControl = L.control.layers(baseLayers, overlayLayers, {
@@ -2513,7 +2429,6 @@ async function salvarCliente(event) {
         fecharModal('modal-cliente');
         carregarListaClientes(paginaAtualClientes);
         atualizarEstatisticas();
-        carregarClientesParaFiltros();
 
     } catch (error) {
         alert('Erro ao salvar cliente: ' + error.message);
@@ -2759,11 +2674,6 @@ async function salvarPropriedade(event) {
             atualizarEstatisticas();
         }
 
-        // Recarregar polígonos no mapa
-        if (typeof carregarPropriedades === 'function') {
-            carregarPropriedades();
-        }
-
     } catch (error) {
         alert('Erro ao salvar propriedade: ' + error.message);
     }
@@ -2795,11 +2705,6 @@ async function excluirPropriedade(id) {
         // Atualizar estatísticas
         if (typeof atualizarEstatisticas === 'function') {
             atualizarEstatisticas();
-        }
-
-        // Recarregar polígonos no mapa
-        if (typeof carregarPropriedades === 'function') {
-            carregarPropriedades();
         }
 
     } catch (error) {
@@ -3267,11 +3172,6 @@ async function salvarMemorialCompletoAba() {
             // Atualizar dashboard
             atualizarEstatisticas();
 
-            // Recarregar propriedades no mapa
-            setTimeout(() => {
-                carregarPropriedades();
-            }, 1000);
-
             // Limpar após 3 segundos
             setTimeout(() => {
                 document.getElementById('formulario-confirmacao-memorial').style.display = 'none';
@@ -3367,36 +3267,284 @@ console.log('✅ Funções JavaScript faltantes adicionadas com sucesso!');
 // CARREGAR MARCOS GEODÉSICOS
 // ==========================================
 
-async function carregarMarcos(options = {}) {
+async function carregarMarcos() {
+    console.log('📥 CARREGANDO MARCOS DO POSTGRESQL...');
+
     try {
-        // Construir query string com opções
-        const params = new URLSearchParams();
+        // URL da API - HARDCODED para garantir
+        const url = 'http://localhost:3001/api/marcos?limite=5000&levantados=true';
+        console.log(`🔗 URL: ${url}`);
 
-        if (options.bbox) params.append('bbox', options.bbox);
-        if (options.limit) params.append('limite', options.limit);
-        if (options.tipo) params.append('tipo', options.tipo);
-        if (options.status) params.append('status_campo', options.status);
-
-        const queryString = params.toString();
-        const url = queryString ? `/api/marcos?${queryString}` : '/api/marcos';
-
-        console.log(`🔄 Carregando marcos: ${url}`);
-
+        // Fetch
+        console.log('⏳ Fazendo requisição...');
         const response = await fetch(url);
-        const result = await response.json();
 
-        if (!result.success) {
-            throw new Error(result.message);
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
 
-        console.log(`✅ ${result.data.length} marcos carregados da API`);
+        console.log('✅ Requisição bem-sucedida');
 
-        // Criar layer de marcos usando Supercluster
-        criarLayerMarcos(result.data);
+        // Parse JSON
+        const result = await response.json();
+        console.log(`📊 Total no banco: ${result.total}`);
+        console.log(`📦 Retornados: ${result.data.length}`);
+
+        if (!result.data || result.data.length === 0) {
+            console.warn('⚠️  API retornou array vazio');
+            alert('Nenhum marco encontrado no banco');
+            return;
+        }
+
+        // Converter para formato GeoJSON
+        console.log('🔄 Convertendo para GeoJSON...');
+        const features = [];
+
+        for (const marco of result.data) {
+            // Validar coordenadas
+            if (!marco.latitude || !marco.longitude) {
+                console.warn(`⚠️  Marco ${marco.codigo} sem coordenadas`);
+                continue;
+            }
+
+            const lat = parseFloat(marco.latitude);
+            const lng = parseFloat(marco.longitude);
+
+            if (isNaN(lat) || isNaN(lng)) {
+                console.warn(`⚠️  Marco ${marco.codigo} com coordenadas inválidas`);
+                continue;
+            }
+
+            // Criar feature GeoJSON
+            features.push({
+                type: 'Feature',
+                geometry: {
+                    type: 'Point',
+                    coordinates: [lng, lat] // [longitude, latitude]
+                },
+                properties: {
+                    id: marco.id,
+                    codigo: marco.codigo,
+                    tipo: marco.tipo,
+                    municipio: marco.municipio || '',
+                    estado: marco.estado || 'PR',
+                    altitude: marco.altitude,
+                    data_levantamento: marco.data_levantamento,
+                    metodo: marco.metodo,
+                    status: marco.status
+                }
+            });
+        }
+
+        console.log(`✅ ${features.length} features GeoJSON criadas`);
+
+        if (features.length === 0) {
+            console.error('❌ Nenhuma feature válida criada!');
+            alert('Erro: Marcos sem coordenadas válidas');
+            return;
+        }
+
+        // Criar GeoJSON FeatureCollection
+        const geojson = {
+            type: 'FeatureCollection',
+            features: features
+        };
+
+        console.log('📍 GeoJSON completo:', geojson);
+
+        // Verificar se supercluster existe
+        if (typeof supercluster === 'undefined' || !supercluster) {
+            console.error('❌ Supercluster não está definido!');
+            console.log('Variáveis globais:', Object.keys(window));
+            alert('Erro: Sistema de clustering não inicializado');
+            return;
+        }
+
+        console.log('✅ Supercluster disponível');
+
+        // Carregar dados no Supercluster
+        console.log('⏳ Carregando no Supercluster...');
+        supercluster.load(features);
+        console.log('✅ Dados carregados no Supercluster!');
+
+        // Guardar features globalmente para debug
+        window.marcosFeatures = features;
+        window.marcosGeoJSON = geojson;
+
+        console.log('💾 Dados salvos em window.marcosFeatures e window.marcosGeoJSON');
+
+        // Atualizar marcadores no mapa
+        console.log('⏳ Atualizando marcadores...');
+
+        if (typeof atualizarMarcadores === 'function') {
+            atualizarMarcadores();
+            console.log('✅ Marcadores atualizados!');
+        } else {
+            console.error('❌ Função atualizarMarcadores não existe!');
+        }
+
+        // Sucesso!
+        console.log(`🎉 SUCESSO! ${features.length} marcos carregados no mapa!`);
+
+        // Atualizar estatísticas
+        if (typeof atualizarEstatisticas === 'function') {
+            atualizarEstatisticas();
+        }
 
     } catch (error) {
-        console.error('❌ Erro ao carregar marcos:', error);
-        showToast('Erro ao carregar marcos: ' + error.message, 'error');
+        console.error('❌ ERRO FATAL em carregarMarcos():');
+        console.error('Tipo:', error.name);
+        console.error('Mensagem:', error.message);
+        console.error('Stack:', error.stack);
+
+        alert(`Erro ao carregar marcos:\n\n${error.message}\n\nAbra o console (F12) para mais detalhes.`);
+    }
+}
+
+function atualizarMarcadores() {
+    console.log('🔄 ATUALIZANDO MARCADORES NO MAPA...');
+
+    try {
+        // Verificações básicas
+        if (!map) {
+            console.error('❌ Mapa não existe!');
+            return;
+        }
+
+        if (typeof supercluster === 'undefined' || !supercluster) {
+            console.error('❌ Supercluster não existe!');
+            return;
+        }
+
+        if (!window.marcosFeatures || window.marcosFeatures.length === 0) {
+            console.warn('⚠️ Nenhum marco carregado ainda');
+            return;
+        }
+
+        console.log('✅ Mapa e Supercluster OK');
+
+        // Pegar bounds do mapa
+        const bounds = map.getBounds();
+        const bbox = [
+            bounds.getWest(),
+            bounds.getSouth(),
+            bounds.getEast(),
+            bounds.getNorth()
+        ];
+
+        const zoom = Math.floor(map.getZoom());
+
+        console.log(`📏 Zoom: ${zoom}`);
+        console.log(`📦 BBox: [${bbox.map(n => n.toFixed(2)).join(', ')}]`);
+
+        // Pegar clusters/pontos
+        let clusters;
+        try {
+            clusters = supercluster.getClusters(bbox, zoom);
+            console.log(`✅ ${clusters.length} clusters/pontos retornados`);
+        } catch (error) {
+            console.error('❌ Erro ao chamar getClusters:', error);
+            return;
+        }
+
+        // Criar ou limpar layer de marcadores
+        if (!window.marcadoresLayer) {
+            console.log('🆕 Criando layer de marcadores...');
+            window.marcadoresLayer = L.layerGroup().addTo(map);
+        } else {
+            console.log('🧹 Limpando marcadores antigos...');
+            window.marcadoresLayer.clearLayers();
+        }
+
+        // Adicionar marcadores
+        let clustersAdicionados = 0;
+        let marcosAdicionados = 0;
+
+        clusters.forEach((cluster, index) => {
+            try {
+                const [lng, lat] = cluster.geometry.coordinates;
+                const props = cluster.properties;
+
+                if (props.cluster) {
+                    // É um CLUSTER (vários marcos agrupados)
+                    const size = props.point_count < 10 ? 30 : props.point_count < 100 ? 40 : 50;
+                    const color = props.point_count < 10 ? '#51bbd6' : props.point_count < 100 ? '#f1f075' : '#f28cb1';
+
+                    const marker = L.marker([lat, lng], {
+                        icon: L.divIcon({
+                            html: `<div style="
+                                background: ${color};
+                                color: white;
+                                border-radius: 50%;
+                                width: ${size}px;
+                                height: ${size}px;
+                                display: flex;
+                                align-items: center;
+                                justify-content: center;
+                                font-weight: bold;
+                                font-size: 14px;
+                                border: 3px solid white;
+                                box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+                            ">${props.point_count}</div>`,
+                            className: '',
+                            iconSize: [size, size]
+                        })
+                    });
+
+                    // Ao clicar, dar zoom
+                    marker.on('click', () => {
+                        const expansionZoom = supercluster.getClusterExpansionZoom(cluster.id);
+                        map.setView([lat, lng], expansionZoom + 1, { animate: true });
+                    });
+
+                    window.marcadoresLayer.addLayer(marker);
+                    clustersAdicionados++;
+
+                } else {
+                    // É um MARCO INDIVIDUAL
+                    const iconColor = props.tipo === 'V' ? 'red' : props.tipo === 'M' ? 'blue' : 'green';
+
+                    const marker = L.circleMarker([lat, lng], {
+                        radius: 8,
+                        fillColor: iconColor,
+                        color: 'white',
+                        weight: 2,
+                        opacity: 1,
+                        fillOpacity: 0.8
+                    });
+
+                    // Popup
+                    marker.bindPopup(`
+                        <div style="font-family: Arial; min-width: 200px;">
+                            <h3 style="margin: 0 0 10px 0; color: #333; font-size: 16px;">
+                                ${props.codigo}
+                            </h3>
+                            <table style="width: 100%; font-size: 13px;">
+                                <tr><td><strong>Tipo:</strong></td><td>${props.tipo}</td></tr>
+                                <tr><td><strong>Município:</strong></td><td>${props.municipio || 'N/A'}</td></tr>
+                                <tr><td><strong>Estado:</strong></td><td>${props.estado || 'PR'}</td></tr>
+                                <tr><td><strong>Altitude:</strong></td><td>${props.altitude ? props.altitude + 'm' : 'N/A'}</td></tr>
+                                <tr><td><strong>Status:</strong></td><td>${props.status || 'LEVANTADO'}</td></tr>
+                            </table>
+                        </div>
+                    `);
+
+                    window.marcadoresLayer.addLayer(marker);
+                    marcosAdicionados++;
+                }
+
+            } catch (error) {
+                console.error(`❌ Erro ao processar item ${index}:`, error);
+            }
+        });
+
+        console.log(`✅ Adicionados: ${clustersAdicionados} clusters + ${marcosAdicionados} marcos`);
+        console.log(`🎉 MARCADORES ATUALIZADOS COM SUCESSO!`);
+
+    } catch (error) {
+        console.error('❌ ERRO em atualizarMarcadores():');
+        console.error('Mensagem:', error.message);
+        console.error('Stack:', error.stack);
     }
 }
 
@@ -3676,27 +3824,7 @@ async function atualizarEstatisticas() {
             }
         }
 
-        // Buscar estatísticas de propriedades
-        const resProp = await fetch('/api/propriedades?limite=1');
-        const dataProp = await resProp.json();
-        if (dataProp.success) {
-            const statPropEl = document.getElementById('stat-propriedades');
-            if (statPropEl) {
-                statPropEl.textContent = `🏘️ Propriedades: ${dataProp.total.toLocaleString('pt-BR')}`;
-            }
-        }
-
-        // Buscar estatísticas de clientes
-        const resClientes = await fetch('/api/clientes?limite=1');
-        const dataClientes = await resClientes.json();
-        if (dataClientes.success) {
-            const statClientesEl = document.getElementById('stat-clientes');
-            if (statClientesEl) {
-                statClientesEl.textContent = `👥 Clientes: ${dataClientes.total.toLocaleString('pt-BR')}`;
-            }
-        }
-
-        console.log('✅ Estatísticas atualizadas');
+        console.log('✅ Estatísticas de marcos atualizadas');
     } catch (error) {
         console.error('❌ Erro ao atualizar estatísticas:', error);
     }
@@ -3733,30 +3861,6 @@ function pararAtualizacaoAutomatica() {
     }
 }
 
-async function carregarClientesParaFiltros() {
-    try {
-        const response = await fetch('/api/clientes?limite=1000');
-        const result = await response.json();
-
-        if (result.success && result.data.length > 0) {
-            // Preencher select de filtro de cliente (se existir)
-            const selectFiltroCliente = document.getElementById('filtro-cliente');
-            if (selectFiltroCliente) {
-                selectFiltroCliente.innerHTML = '<option value="">Todos os clientes</option>';
-                result.data.forEach(cliente => {
-                    const option = document.createElement('option');
-                    option.value = cliente.id;
-                    option.textContent = cliente.nome;
-                    selectFiltroCliente.appendChild(option);
-                });
-            }
-
-            console.log('✅ Clientes carregados para filtros');
-        }
-    } catch (error) {
-        console.error('Erro ao carregar clientes:', error);
-    }
-}
 
 function configurarListenersArquivo() {
     const inputArquivo = document.getElementById('arquivo-memorial');

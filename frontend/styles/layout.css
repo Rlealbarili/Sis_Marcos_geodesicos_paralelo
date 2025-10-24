@@ -1,0 +1,74 @@
+/**
+ * COGEP Layout
+ * Estrutura de layout da aplicação
+ */
+
+/* ========================================
+   PAGE STRUCTURE
+   ======================================== */
+
+.page {
+  display: flex;
+  min-height: 100vh;
+}
+
+.page-sidebar {
+  flex-shrink: 0;
+}
+
+.page-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.page-header {
+  flex-shrink: 0;
+}
+
+.page-content {
+  flex: 1;
+  padding: var(--spacing-6);
+}
+
+/* ========================================
+   GRID SYSTEM
+   ======================================== */
+
+.grid {
+  display: grid;
+  gap: var(--spacing-4);
+}
+
+.grid-cols-1 { grid-template-columns: repeat(1, 1fr); }
+.grid-cols-2 { grid-template-columns: repeat(2, 1fr); }
+.grid-cols-3 { grid-template-columns: repeat(3, 1fr); }
+.grid-cols-4 { grid-template-columns: repeat(4, 1fr); }
+
+/* ========================================
+   FLEX UTILITIES
+   ======================================== */
+
+.flex {
+  display: flex;
+}
+
+.flex-col {
+  flex-direction: column;
+}
+
+.items-center {
+  align-items: center;
+}
+
+.justify-between {
+  justify-content: space-between;
+}
+
+.justify-center {
+  justify-content: center;
+}
+
+.gap-2 { gap: var(--spacing-2); }
+.gap-4 { gap: var(--spacing-4); }
+.gap-6 { gap: var(--spacing-6); }

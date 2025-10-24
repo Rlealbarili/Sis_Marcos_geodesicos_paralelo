@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>COGEP - Sistema de Marcos Geodésicos</title>
+
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <!-- Design System Premium -->
+    <link rel="stylesheet" href="styles/design-system.css">
+    <link rel="stylesheet" href="styles/components.css">
+    <link rel="stylesheet" href="styles/animations.css">
+
+    <!-- Leaflet -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/proj4@2.9.2/dist/proj4.js"></script>
+    <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
+
+    <!-- Supercluster -->
+    <script src="https://unpkg.com/supercluster@8.0.1/dist/supercluster.min.js"></script>
+
+    <style>
+        /* Layout Premium */
+        .app-container {
+            display: flex;
+            min-height: 100vh;
+            background-color: var(--bg-primary);
+        }
+
+        .main-content {
+            flex: 1;
+            margin-left: var(--sidebar-width);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .content-header {
+            padding: var(--space-6);
+            border-bottom: var(--border-width) solid var(--border-primary);
+            background-color: var(--bg-primary);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 50;
+        }
+
+        .content-body {
+            flex: 1;
+            overflow: hidden;
+        }
+
+        /* Tabs Premium */
+        .tabs-container {
+            border-bottom: var(--border-width) solid var(--border-primary);
+            background-color: var(--bg-primary);
+            padding: 0 var(--space-6);
+        }
+
+        .tabs-list {
+            display: flex;
+            gap: var(--space-6);
+            overflow-x: auto;
+        }
+
+        .tab-button {
+            padding: var(--space-4) 0;
+            font-size: var(--text-base);
+            font-weight: var(--weight-medium);
+            color: var(--text-secondary);
+            background: none;
+            border: none;
+            border-bottom: 2px solid transparent;
+            cursor: pointer;
+            transition: all var(--transition-fast);
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            gap: var(--space-2);
+        }
+
+        .tab-button:hover {
+            color: var(--text-primary);
+        }
+
+        .tab-button.active {
+            color: var(--cogep-green);
+            border-bottom-color: var(--cogep-green);
+            font-weight: var(--weight-bold);
+        }
+
+        .tab-content {
+            display: none;
+            height: 100%;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* Mapa Premium */
+        #map {
+            width: 100%;
+            height: calc(100vh - 120px);
+            z-index: 1;
+        }
+
+        /* Stats Cards */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: var(--space-4);
+            padding: var(--space-6);
+        }
+
+        .stat-card {
+            background-color: var(--bg-primary);
+            border: var(--border-width) solid var(--border-primary);
+            border-radius: var(--radius-lg);
+            padding: var(--space-5);
+            transition: all var(--transition-base);
+        }
+
+        .stat-card:hover {
+            border-color: var(--border-secondary);
+            transform: translateY(-2px);
+        }
+
+        .stat-label {
+            font-size: var(--text-sm);
+            color: var(--text-secondary);
+            margin-bottom: var(--space-2);
+        }
+
+        .stat-value {
+            font-size: var(--text-3xl);
+            font-weight: var(--weight-heavy);
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: var(--space-3);
+        }
+
+        .stat-icon {
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: var(--cogep-green);
+            color: white;
+            border-radius: var(--radius-md);
+        }
+
+        /* Search Header */
+        .search-header {
+            display: flex;
+            align-items: center;
+            gap: var(--space-4);
+            flex: 1;
+            max-width: 600px;
+        }
+
+        /* Modal Premium */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: var(--overlay);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background-color: var(--bg-primary);
+            border-radius: var(--radius-xl);
+            width: 90%;
+            max-width: 600px;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+
+        .modal-header {
+            padding: var(--space-6);
+            border-bottom: var(--border-width) solid var(--border-primary);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .modal-title {
+            font-size: var(--text-2xl);
+            font-weight: var(--weight-heavy);
+            color: var(--text-primary);
+        }
+
+        .modal-body {
+            padding: var(--space-6);
+        }
+
+        .modal-footer {
+            padding: var(--space-6);
+            border-top: var(--border-width) solid var(--border-primary);
+            display: flex;
+            gap: var(--space-3);
+            justify-content: flex-end;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="app-container">
+
+        <!-- SIDEBAR -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <a href="#" class="sidebar-logo">
+                    <i data-lucide="map-pin"></i>
+                    <span class="sidebar-logo-text">COGEP</span>
+                </a>
+            </div>
+
+            <nav class="sidebar-nav">
+                <a href="#" class="nav-link active" data-tab="mapa">
+                    <i data-lucide="map"></i>
+                    <span>Mapa</span>
+                </a>
+                <a href="#" class="nav-link" data-tab="marcos">
+                    <i data-lucide="map-pin"></i>
+                    <span>Marcos</span>
+                </a>
+                <a href="#" class="nav-link" data-tab="importar">
+                    <i data-lucide="upload"></i>
+                    <span>Importar</span>
+                </a>
+                <a href="#" class="nav-link" data-tab="propriedades">
+                    <i data-lucide="building-2"></i>
+                    <span>Propriedades</span>
+                </a>
+                <a href="#" class="nav-link" data-tab="clientes">
+                    <i data-lucide="users"></i>
+                    <span>Clientes</span>
+                </a>
+                <a href="#" class="nav-link" data-tab="historico">
+                    <i data-lucide="clock"></i>
+                    <span>Histórico</span>
+                </a>
+            </nav>
+
+            <div style="padding: var(--space-4); border-top: 1px solid var(--border-primary);">
+                <button class="theme-toggle" onclick="toggleTheme()">
+                    <i data-lucide="moon" id="theme-icon"></i>
+                </button>
+            </div>
+        </aside>
+
+        <!-- MAIN CONTENT -->
+        <main class="main-content">
+
+            <!-- HEADER -->
+            <header class="content-header">
+                <div class="search-header">
+                    <h1 style="font-size: var(--text-2xl); font-weight: var(--weight-heavy); color: var(--text-primary); letter-spacing: -0.5px;">
+                        Sistema de Marcos Geodésicos
+                    </h1>
+                </div>
+                <div style="display: flex; gap: var(--space-3); align-items: center;">
+                    <div class="search-wrapper" style="width: 300px;">
+                        <i data-lucide="search" class="search-icon"></i>
+                        <input type="text" class="input input-search" placeholder="Buscar...">
+                    </div>
+                    <button class="btn btn-primary" onclick="abrirModalNovoMarco()">
+                        <i data-lucide="plus" style="width: 18px; height: 18px;"></i>
+                        Novo Marco
+                    </button>
+                </div>
+            </header>
+
+            <!-- STATS -->
+            <div class="stats-grid">
+                <div class="stat-card animate-fade-in-up">
+                    <div class="stat-label">Total de Marcos</div>
+                    <div class="stat-value">
+                        <div class="stat-icon">
+                            <i data-lucide="map-pin" style="width: 24px; height: 24px;"></i>
+                        </div>
+                        <span id="stat-marcos">218</span>
+                    </div>
+                </div>
+                <div class="stat-card animate-fade-in-up" style="animation-delay: 0.05s;">
+                    <div class="stat-label">Marcos Levantados</div>
+                    <div class="stat-value">
+                        <div class="stat-icon" style="background-color: #10B981;">
+                            <i data-lucide="check-circle" style="width: 24px; height: 24px;"></i>
+                        </div>
+                        <span id="stat-levantados">218</span>
+                    </div>
+                </div>
+                <div class="stat-card animate-fade-in-up" style="animation-delay: 0.1s;">
+                    <div class="stat-label">Propriedades</div>
+                    <div class="stat-value">
+                        <div class="stat-icon" style="background-color: #3B82F6;">
+                            <i data-lucide="building-2" style="width: 24px; height: 24px;"></i>
+                        </div>
+                        <span id="stat-propriedades">0</span>
+                    </div>
+                </div>
+                <div class="stat-card animate-fade-in-up" style="animation-delay: 0.15s;">
+                    <div class="stat-label">Clientes</div>
+                    <div class="stat-value">
+                        <div class="stat-icon" style="background-color: #F59E0B;">
+                            <i data-lucide="users" style="width: 24px; height: 24px;"></i>
+                        </div>
+                        <span id="stat-clientes">0</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TABS -->
+            <div class="tabs-container">
+                <div class="tabs-list">
+                    <button class="tab-button active" data-tab="mapa">
+                        <i data-lucide="map" style="width: 18px; height: 18px;"></i>
+                        Mapa
+                    </button>
+                    <button class="tab-button" data-tab="marcos">
+                        <i data-lucide="map-pin" style="width: 18px; height: 18px;"></i>
+                        Buscar Marcos
+                    </button>
+                    <button class="tab-button" data-tab="importar">
+                        <i data-lucide="upload" style="width: 18px; height: 18px;"></i>
+                        Importar Memorial
+                    </button>
+                    <button class="tab-button" data-tab="propriedades">
+                        <i data-lucide="building-2" style="width: 18px; height: 18px;"></i>
+                        Propriedades
+                    </button>
+                    <button class="tab-button" data-tab="clientes">
+                        <i data-lucide="users" style="width: 18px; height: 18px;"></i>
+                        Clientes
+                    </button>
+                    <button class="tab-button" data-tab="historico">
+                        <i data-lucide="clock" style="width: 18px; height: 18px;"></i>
+                        Histórico
+                    </button>
+                </div>
+            </div>
+
+            <!-- TAB CONTENT -->
+            <div class="content-body">
+
+                <!-- ABA MAPA -->
+                <div id="tab-mapa" class="tab-content active">
+                    <div id="map"></div>
+                </div>
+
+                <!-- ABA MARCOS -->
+                <div id="tab-marcos" class="tab-content">
+                    <div style="padding: var(--space-6);">
+                        <h2>Buscar Marcos Geodésicos</h2>
+                        <p>Funcionalidade em desenvolvimento...</p>
+                    </div>
+                </div>
+
+                <!-- ABA IMPORTAR -->
+                <div id="tab-importar" class="tab-content">
+                    <div style="padding: var(--space-6);">
+                        <h2>Importar Memorial Descritivo</h2>
+                        <p>Funcionalidade em desenvolvimento...</p>
+                    </div>
+                </div>
+
+                <!-- ABA PROPRIEDADES -->
+                <div id="tab-propriedades" class="tab-content">
+                    <div style="padding: var(--space-6);">
+                        <h2>Gestão de Propriedades</h2>
+                        <p>Funcionalidade em desenvolvimento...</p>
+                    </div>
+                </div>
+
+                <!-- ABA CLIENTES -->
+                <div id="tab-clientes" class="tab-content">
+                    <div style="padding: var(--space-6);">
+                        <h2>Gestão de Clientes</h2>
+                        <p>Funcionalidade em desenvolvimento...</p>
+                    </div>
+                </div>
+
+                <!-- ABA HISTÓRICO -->
+                <div id="tab-historico" class="tab-content">
+                    <div style="padding: var(--space-6);">
+                        <h2>Histórico de Importações</h2>
+                        <p>Funcionalidade em desenvolvimento...</p>
+                    </div>
+                </div>
+
+            </div>
+
+        </main>
+
+    </div>
+
+    <!-- SCRIPTS -->
+    <script src="script.js"></script>
+    <script>
+        // Inicializar Lucide Icons
+        lucide.createIcons();
+
+        // Toggle Theme
+        function toggleTheme() {
+            const html = document.documentElement;
+            const currentTheme = html.getAttribute('data-theme');
+            const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+
+            html.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+
+            // Update icon
+            const icon = document.getElementById('theme-icon');
+            icon.setAttribute('data-lucide', newTheme === 'light' ? 'moon' : 'sun');
+            lucide.createIcons();
+        }
+
+        // Load saved theme
+        const savedTheme = localStorage.getItem('theme') || 'light';
+        document.documentElement.setAttribute('data-theme', savedTheme);
+
+        // Update icon on load
+        const themeIcon = document.getElementById('theme-icon');
+        themeIcon.setAttribute('data-lucide', savedTheme === 'light' ? 'moon' : 'sun');
+
+        // Tab Navigation
+        document.querySelectorAll('.tab-button').forEach(button => {
+            button.addEventListener('click', () => {
+                const tabName = button.getAttribute('data-tab');
+
+                // Update buttons
+                document.querySelectorAll('.tab-button').forEach(b => b.classList.remove('active'));
+                button.classList.add('active');
+
+                // Update content
+                document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+                document.getElementById('tab-' + tabName).classList.add('active');
+
+                // Update sidebar
+                document.querySelectorAll('.nav-link').forEach(link => link.classList.remove('active'));
+                document.querySelector('.nav-link[data-tab="' + tabName + '"]').classList.add('active');
+            });
+        });
+
+        // Sidebar Navigation
+        document.querySelectorAll('.nav-link').forEach(link => {
+            link.addEventListener('click', (e) => {
+                e.preventDefault();
+                const tabName = link.getAttribute('data-tab');
+
+                // Trigger tab button click
+                document.querySelector('.tab-button[data-tab="' + tabName + '"]').click();
+            });
+        });
+
+        // Placeholder functions
+        function abrirModalNovoMarco() {
+            alert('Modal de Novo Marco - Em desenvolvimento');
+        }
+
+        // Initialize icons after DOM load
+        document.addEventListener('DOMContentLoaded', () => {
+            lucide.createIcons();
+        });
+    </script>
+
+</body>
+</html>
