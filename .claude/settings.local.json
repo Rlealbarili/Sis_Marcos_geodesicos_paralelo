@@ -21,7 +21,8 @@
       "Bash(awk:*)",
       "Bash(xargs kill:*)",
       "Bash(cmd.exe //c \"taskkill //PID 14908 //F\")",
-      "Bash(cmd.exe /c \"taskkill /PID 14908 /F\")"
+      "Bash(cmd.exe /c \"taskkill /PID 14908 /F\")",
+      "Bash(npm run test:premium:*)"
     ],
     "deny": [],
     "ask": []

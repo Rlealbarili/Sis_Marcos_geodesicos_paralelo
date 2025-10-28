@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Guia de Estilo - COGEP</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* =====================================================================
+        | ESSÊNCIA DO DESIGN: VARIÁVEIS DE COR E ESTILOS GLOBAIS             |
+        | Copie este bloco para o seu arquivo CSS principal para garantir   |
+        | consistência em todo o sistema.                                   |
+        =====================================================================
+        */
+        :root {
+            --color-background: #000000;
+            --color-surface: #111111; /* Cor de fundo para cards, sidebar, etc. */
+            --color-border: #222222;
+            --color-text-primary: #EAFBF4;
+            --color-text-secondary: #a0aec0; /* Cinza para textos de apoio */
+            
+            --color-accent: #00DC82; /* Verde principal */
+            --color-accent-dark: #00b86b;
+            --color-accent-support: #0B3B2C; /* Verde escuro para estados ativos */
+            
+            --color-success: #00DC82;
+            --color-warning: #facc15; /* Amarelo */
+            --color-danger: #ef4444; /* Vermelho */
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--color-background);
+            color: var(--color-text-primary);
+        }
+
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: var(--color-surface);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: var(--color-border);
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #333333;
+        }
+    </style>
+</head>
+<body class="p-8 md:p-12">
+
+    <header class="mb-12 border-b border-gray-primary pb-6">
+        <h1 class="text-4xl font-bold text-white-primary">Guia de Estilo - Sistema COGEP</h1>
+        <p class="text-lg text-gray-400 mt-2">Recursos e componentes para o desenvolvimento do sistema.</p>
+    </header>
+
+    <!-- Seção de Cores -->
+    <section class="mb-12">
+        <h2 class="text-2xl font-semibold mb-6">Paleta de Cores</h2>
+        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6">
+            <div class="text-center">
+                <div class="w-full h-24 rounded-lg" style="background-color: var(--color-accent);"></div>
+                <p class="mt-2 font-medium">Acento (Accent)</p>
+                <p class="text-sm text-gray-400">#00DC82</p>
+            </div>
+            <div class="text-center">
+                <div class="w-full h-24 rounded-lg" style="background-color: var(--color-accent-support);"></div>
+                <p class="mt-2 font-medium">Suporte (Support)</p>
+                <p class="text-sm text-gray-400">#0B3B2C</p>
+            </div>
+            <div class="text-center">
+                <div class="w-full h-24 rounded-lg" style="background-color: var(--color-text-primary);"></div>
+                <p class="mt-2 font-medium">Texto Principal</p>
+                <p class="text-sm text-gray-400">#EAFBF4</p>
+            </div>
+            <div class="text-center">
+                <div class="w-full h-24 rounded-lg" style="background-color: var(--color-background);"></div>
+                <p class="mt-2 font-medium">Fundo (Background)</p>
+                <p class="text-sm text-gray-400">#000000</p>
+            </div>
+            <div class="text-center">
+                <div class="w-full h-24 rounded-lg" style="background-color: var(--color-surface);"></div>
+                <p class="mt-2 font-medium">Superfície (Surface)</p>
+                <p class="text-sm text-gray-400">#111111</p>
+            </div>
+            <div class="text-center">
+                <div class="w-full h-24 rounded-lg" style="background-color: var(--color-border);"></div>
+                <p class="mt-2 font-medium">Bordas (Border)</p>
+                <p class="text-sm text-gray-400">#222222</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Seção de Tipografia -->
+    <section class="mb-12">
+        <h2 class="text-2xl font-semibold mb-6">Tipografia</h2>
+        <div class="bg-gray-primary p-6 rounded-lg border border-gray-primary">
+            <h1 class="text-4xl font-bold">Cabeçalho Nível 1</h1>
+            <h2 class="text-3xl font-bold mt-2">Cabeçalho Nível 2</h2>
+            <h3 class="text-2xl font-semibold mt-2">Cabeçalho Nível 3</h3>
+            <p class="mt-4 text-base">Este é um parágrafo de texto padrão, usando a fonte Inter. Ele serve para exibir informações gerais e descrições no sistema, mantendo a legibilidade e a elegância.</p>
+            <p class="mt-2 text-sm text-gray-400">Este é um texto secundário ou de apoio, ideal para legendas ou informações menos importantes.</p>
+        </div>
+    </section>
+
+    <!-- Seção de Componentes -->
+    <section>
+        <h2 class="text-2xl font-semibold mb-6">Componentes</h2>
+        
+        <!-- Botões -->
+        <div class="mb-8">
+            <h3 class="text-xl font-medium mb-4">Botões</h3>
+            <div class="bg-gray-primary p-6 rounded-lg border border-gray-primary flex items-center space-x-4">
+                <button class="bg-green-accent text-black font-bold px-4 py-2 rounded-lg hover:bg-green-accent-dark transition-colors flex items-center space-x-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-plus"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                    <span>Botão Primário</span>
+                </button>
+                <button class="bg-gray-primary text-white-primary px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors border border-gray-primary">Botão Secundário</button>
+            </div>
+        </div>
+
+        <!-- Cards -->
+        <div class="mb-8">
+            <h3 class="text-xl font-medium mb-4">Cards</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div class="bg-gray-primary p-6 rounded-lg border border-gray-primary">
+                    <div class="flex items-center justify-between">
+                        <p class="text-gray-400">Total de Projetos</p>
+                        <span class="text-green-accent">▲ 12%</span>
+                    </div>
+                    <p class="text-3xl font-bold mt-2">1,287</p>
+                </div>
+                 <div class="bg-gray-primary p-6 rounded-lg border border-gray-primary">
+                    <div class="flex items-center justify-between">
+                        <p class="text-gray-400">Novos Leads</p>
+                        <span class="text-red-500">▼ 2%</span>
+                    </div>
+                    <p class="text-3xl font-bold mt-2">45</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Formulários e Tabelas -->
+        <div>
+             <h3 class="text-xl font-medium mb-4">Entradas de Formulário e Tabelas</h3>
+             <div class="bg-gray-primary p-6 rounded-lg border border-gray-primary">
+                 <div class="relative mb-6 max-w-sm">
+                    <label class="block text-sm font-medium text-gray-400 mb-1">Campo de Busca</label>
+                    <input type="text" placeholder="Buscar cliente..." class="w-full bg-black-primary border border-gray-primary rounded-lg py-2 pl-10 pr-4 focus:ring-2 focus:ring-green-accent focus:outline-none">
+                    <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 mt-3" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                </div>
+
+                <div class="overflow-hidden rounded-lg border border-gray-primary">
+                     <table class="w-full text-left">
+                        <thead class="bg-black">
+                            <tr>
+                                <th class="p-4 font-semibold">Nome do Cliente</th>
+                                <th class="p-4 font-semibold">Status</th>
+                                <th class="p-4 font-semibold">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr class="border-b border-gray-primary hover:bg-black/30 transition-colors">
+                                <td class="p-4">Construtora Alfa</td>
+                                <td class="p-4"><span class="px-2 py-1 text-xs font-semibold rounded-full bg-green-accent/20 text-green-accent">Ativo</span></td>
+                                <td class="p-4"><a href="#" class="text-green-accent hover:underline">Ver Detalhes</a></td>
+                            </tr>
+                            <tr class="hover:bg-black/30 transition-colors">
+                                <td class="p-4">Delta Investimentos</td>
+                                <td class="p-4"><span class="px-2 py-1 text-xs font-semibold rounded-full bg-red-500/20 text-red-400">Inativo</span></td>
+                                <td class="p-4"><a href="#" class="text-green-accent hover:underline">Ver Detalhes</a></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+             </div>
+        </div>
+    </section>
+
+</body>
+</html>

@@ -368,6 +368,18 @@ app.get('/api/marcos/:codigo', async (req, res) => {
 });
 
 // ============================================
+// ROTAS: CLIENTES E PROPRIEDADES
+// ============================================
+
+// Rotas de Clientes
+const clientesRoutes = require('./routes/clientes');
+app.use('/api/clientes', clientesRoutes);
+
+// Rotas de Propriedades
+const propriedadesRoutes = require('./routes/propriedades');
+app.use('/api/propriedades', propriedadesRoutes);
+
+// ============================================
 // ERROR HANDLER
 // ============================================
 
