@@ -1,7 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-require('dotenv').config({ path: './backend/.env' });
+require('dotenv').config({ path: './backend/.env', override: true });
 const { query, transaction, healthCheck } = require('./database/postgres-connection');
 
 const app = express();
@@ -374,10 +374,27 @@ app.get('/api/marcos/:codigo', async (req, res) => {
 // Rotas de Clientes
 const clientesRoutes = require('./routes/clientes');
 app.use('/api/clientes', clientesRoutes);
+console.log('✅ Rotas de clientes carregadas: /api/clientes');
 
 // Rotas de Propriedades
 const propriedadesRoutes = require('./routes/propriedades');
 app.use('/api/propriedades', propriedadesRoutes);
+console.log('✅ Rotas de propriedades carregadas: /api/propriedades');
+
+// ============================================
+// SPA FALLBACK - Redirecionar para index.html
+// ============================================
+
+// Redirecionar qualquer rota não-API para o index.html (SPA behavior)
+app.get('*', (req, res, next) => {
+    // Se for uma rota de API, continuar normalmente
+    if (req.path.startsWith('/api/')) {
+        return next();
+    }
+
+    // Caso contrário, servir o index.html (Sistema Premium)
+    res.sendFile(path.join(__dirname, '../frontend/index.html'));
+});
 
 // ============================================
 // ERROR HANDLER

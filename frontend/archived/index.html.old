@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Marcos Geodésicos e Propriedades</title>
+
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <!-- Design System -->
+    <link rel="stylesheet" href="styles/design-system.css">
+    <link rel="stylesheet" href="styles/components.css">
+    <link rel="stylesheet" href="styles/animations.css">
+    <link rel="stylesheet" href="styles/layout.css">
+
+    <!-- Estilos Antigos (temporário) -->
+    <link rel="stylesheet" href="styles.css">
+
+    <!-- Leaflet -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/proj4@2.9.2/dist/proj4.js"></script>
+    <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
+</head>
+<body>
+    <!-- Header -->
+    <header class="main-header">
+        <div class="header-content">
+            <h1>🗺️ Sistema de Marcos Geodésicos e Propriedades</h1>
+            <div class="header-stats">
+                <span id="stat-marcos">📍 Marcos: 19.040</span>
+                <span id="stat-propriedades">🏘️ Propriedades: 0</span>
+                <span id="stat-clientes">👥 Clientes: 0</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Navigation Tabs -->
+    <nav class="main-nav">
+        <button class="nav-tab active" data-tab="mapa" onclick="trocarAba('mapa')">
+            🗺️ Mapa
+        </button>
+        <button class="nav-tab" data-tab="importar" onclick="trocarAba('importar')">
+            📄 Importar Memorial
+        </button>
+        <button class="nav-tab" data-tab="propriedades" onclick="trocarAba('propriedades')">
+            🏘️ Propriedades
+        </button>
+        <button class="nav-tab" data-tab="clientes" onclick="trocarAba('clientes')">
+            👥 Clientes
+        </button>
+        <button class="nav-tab" data-tab="buscar-marcos" onclick="trocarAba('buscar-marcos')">
+            🔍 Buscar Marcos
+        </button>
+        <button class="nav-tab" data-tab="historico" onclick="trocarAba('historico')">
+            📋 Histórico
+        </button>
+    </nav>
+
+    <!-- Tab Contents -->
+    <main class="main-content">
+
+        <!-- ABA 1: MAPA -->
+        <section id="tab-mapa" class="tab-content active">
+            <div class="mapa-container">
+                <!-- Filtros do Mapa -->
+                <div class="filtros-mapa">
+                    <h3>🔍 Filtros</h3>
+                    <div class="filtro-group">
+                        <label>Tipo de Propriedade:</label>
+                        <select id="filtro-tipo" onchange="aplicarFiltrosMapa()">
+                            <option value="">Todos</option>
+                            <option value="RURAL">🌳 Rural</option>
+                            <option value="URBANO">🏢 Urbano</option>
+                            <option value="LOTEAMENTO">🏘️ Loteamento</option>
+                        </select>
+                    </div>
+                    <div class="filtro-group">
+                        <label>Município:</label>
+                        <input type="text" id="filtro-municipio" placeholder="Digite o município...">
+                    </div>
+                    <div class="filtro-group">
+                        <label>Cliente:</label>
+                        <select id="filtro-cliente" onchange="aplicarFiltrosMapa()">
+                            <option value="">Todos</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-primary" onclick="aplicarFiltrosMapa()">
+                        ✅ Aplicar Filtros
+                    </button>
+                    <button class="btn btn-secondary" onclick="limparFiltrosMapa()">
+                        🔄 Limpar
+                    </button>
+                </div>
+
+                <!-- Mapa Leaflet -->
+                <div id="map"></div>
+
+                <!-- Legenda -->
+                <div class="legenda-cores">
+                    <h4>📊 Legenda</h4>
+                    <div class="legenda-item">
+                        <div class="legenda-cor" style="background: rgba(46, 204, 113, 0.25); border-color: #27ae60;"></div>
+                        <span>Rural</span>
+                    </div>
+                    <div class="legenda-item">
+                        <div class="legenda-cor" style="background: rgba(52, 152, 219, 0.30); border-color: #2980b9;"></div>
+                        <span>Urbano</span>
+                    </div>
+                    <div class="legenda-item">
+                        <div class="legenda-cor" style="background: rgba(231, 76, 60, 0.20); border-color: #c0392b;"></div>
+                        <span>Loteamento</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ABA 2: IMPORTAR MEMORIAL -->
+        <section id="tab-importar" class="tab-content">
+            <div class="importar-container">
+                <h2>📄 Importar Memorial Descritivo</h2>
+                <p>Faça upload de um arquivo .docx contendo o memorial descritivo da propriedade.</p>
+
+                <!-- Upload -->
+                <div class="upload-area">
+                    <input type="file" id="arquivo-memorial" accept=".docx" style="display: none;">
+                    <button class="btn btn-upload" onclick="document.getElementById('arquivo-memorial').click()">
+                        📁 Selecionar Arquivo .docx
+                    </button>
+                    <p id="nome-arquivo-selecionado" class="arquivo-info"></p>
+                    <button class="btn btn-primary" id="btn-processar" onclick="processarMemorial()" disabled>
+                        ⚙️ Processar Memorial
+                    </button>
+                </div>
+
+                <!-- Progresso -->
+                <div id="progresso-importacao" style="display: none;">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progress-fill"></div>
+                    </div>
+                    <p id="progress-text">Processando...</p>
+                </div>
+
+                <!-- Resultado da Extração -->
+                <div id="resultado-extracao" style="display: none;">
+                    <!-- Será preenchido via JavaScript -->
+                </div>
+
+                <!-- Formulário de Confirmação -->
+                <div id="formulario-confirmacao-memorial" style="display: none;">
+                    <!-- HTML do formulário já existente em importar-memorial.html -->
+                    <!-- Será copiado aqui -->
+                </div>
+            </div>
+        </section>
+
+        <!-- ABA 3: PROPRIEDADES -->
+        <section id="tab-propriedades" class="tab-content">
+            <div class="gestao-container">
+                <div class="gestao-header">
+                    <h2>🏘️ Gestão de Propriedades</h2>
+                    <button class="btn btn-primary" onclick="abrirModalNovaPropriedade()">
+                        ➕ Nova Propriedade
+                    </button>
+                </div>
+
+                <!-- Filtros -->
+                <div class="filtros-lista">
+                    <input type="text" id="busca-propriedades" placeholder="🔍 Buscar por nome, matrícula, município..." onkeyup="buscarPropriedades()">
+                    <select id="filtro-tipo-propriedades" onchange="buscarPropriedades()">
+                        <option value="">Todos os tipos</option>
+                        <option value="RURAL">Rural</option>
+                        <option value="URBANO">Urbano</option>
+                        <option value="LOTEAMENTO">Loteamento</option>
+                    </select>
+                </div>
+
+                <!-- Lista de Propriedades -->
+                <div id="lista-propriedades" class="lista-items">
+                    <div class="loading">Carregando propriedades...</div>
+                </div>
+
+                <!-- Paginação -->
+                <div class="paginacao" id="paginacao-propriedades"></div>
+            </div>
+        </section>
+
+        <!-- ABA 4: CLIENTES -->
+        <section id="tab-clientes" class="tab-content">
+            <div class="gestao-container">
+                <div class="gestao-header">
+                    <h2>👥 Gestão de Clientes</h2>
+                    <button class="btn btn-primary" onclick="abrirModalNovoCliente()">
+                        ➕ Novo Cliente
+                    </button>
+                </div>
+
+                <!-- Filtros -->
+                <div class="filtros-lista">
+                    <input type="text" id="busca-clientes" placeholder="🔍 Buscar por nome, CPF/CNPJ, email..." onkeyup="buscarClientes()">
+                </div>
+
+                <!-- Lista de Clientes -->
+                <div id="lista-clientes" class="lista-items">
+                    <div class="loading">Carregando clientes...</div>
+                </div>
+
+                <!-- Paginação -->
+                <div class="paginacao" id="paginacao-clientes"></div>
+            </div>
+        </section>
+
+        <!-- ABA 5: BUSCAR MARCOS -->
+        <section id="tab-buscar-marcos" class="tab-content">
+            <div class="buscar-marcos-container">
+                <h2>🔍 Buscar Marcos Geodésicos</h2>
+                <p>Sistema de busca e exportação de marcos geodésicos do Brasil</p>
+
+                <!-- Área de Busca -->
+                <div class="busca-avancada">
+                    <div class="form-row">
+                        <div class="form-group" style="flex: 2;">
+                            <label>🔍 Busca Geral:</label>
+                            <input type="text" id="busca-geral-marcos"
+                                   placeholder="Digite nome, município, código..."
+                                   onkeyup="buscarMarcosGeral()">
+                        </div>
+                        <div class="form-group">
+                            <label>🏷️ Tipo:</label>
+                            <select id="filtro-tipo-marco" onchange="buscarMarcosGeral()">
+                                <option value="">Todos os tipos</option>
+                                <option value="FHV-M">FHV-M - Marco</option>
+                                <option value="FHV-P">FHV-P - Pilar</option>
+                                <option value="FHV-O">FHV-O - Outro</option>
+                                <option value="SAT">SAT - Satélite</option>
+                                <option value="RN">RN - Rede de Nivelamento</option>
+                                <option value="RV">RV - Vértice</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>🗺️ UF:</label>
+                            <select id="filtro-uf-marco" onchange="buscarMarcosGeral()">
+                                <option value="">Todas</option>
+                                <option value="PR">PR</option>
+                                <option value="SC">SC</option>
+                                <option value="RS">RS</option>
+                                <option value="SP">SP</option>
+                                <!-- Adicionar outros estados conforme necessário -->
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="acoes-busca">
+                        <button class="btn btn-primary" onclick="buscarMarcosGeral()">
+                            🔍 Buscar
+                        </button>
+                        <button class="btn btn-secondary" onclick="limparBuscaMarcos()">
+                            🔄 Limpar
+                        </button>
+                        <button class="btn btn-success" onclick="exportarMarcosCSV()">
+                            📊 Exportar CSV
+                        </button>
+                        <button class="btn btn-success" onclick="exportarMarcosExcel()">
+                            📊 Exportar Excel
+                        </button>
+                        <button class="btn btn-primary" onclick="abrirModalImportarPlanilha()">
+                            📥 Importar Planilha
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Estatísticas da Busca -->
+                <div id="stats-busca-marcos" class="stats-busca" style="display: none;">
+                    <!-- Será preenchido via JavaScript -->
+                </div>
+
+                <!-- Resultados -->
+                <div id="resultados-marcos" class="resultados-marcos">
+                    <div class="mensagem mensagem-info">
+                        ℹ️ Digite algo no campo de busca para encontrar marcos geodésicos.
+                    </div>
+                </div>
+
+                <!-- Paginação -->
+                <div id="paginacao-marcos" class="paginacao"></div>
+            </div>
+        </section>
+
+        <!-- ABA 6: HISTÓRICO -->
+        <section id="tab-historico" class="tab-content">
+            <div class="gestao-container">
+                <h2>📋 Histórico de Importações</h2>
+
+                <!-- Lista de Histórico -->
+                <div id="lista-historico" class="lista-items">
+                    <div class="loading">Carregando histórico...</div>
+                </div>
+
+                <!-- Paginação -->
+                <div class="paginacao" id="paginacao-historico"></div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- MODAIS -->
+
+    <!-- Modal: Novo Cliente -->
+    <div id="modal-cliente" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modal-cliente-titulo">➕ Novo Cliente</h3>
+                <button class="modal-close" onclick="fecharModal('modal-cliente')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="form-cliente" onsubmit="salvarCliente(event)">
+                    <input type="hidden" id="cliente-id">
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Nome completo: *</label>
+                            <input type="text" id="modal-cliente-nome" required>
+                        </div>
+                        <div class="form-group">
+                            <label>CPF/CNPJ:</label>
+                            <input type="text" id="modal-cliente-cpf">
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Telefone:</label>
+                            <input type="text" id="modal-cliente-telefone" placeholder="(41) 99999-9999">
+                        </div>
+                        <div class="form-group">
+                            <label>Email:</label>
+                            <input type="email" id="modal-cliente-email">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Endereço:</label>
+                        <input type="text" id="modal-cliente-endereco">
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Cidade:</label>
+                            <input type="text" id="modal-cliente-cidade">
+                        </div>
+                        <div class="form-group">
+                            <label>Estado:</label>
+                            <select id="modal-cliente-estado">
+                                <option value="">Selecione...</option>
+                                <option value="PR">PR</option>
+                                <option value="SC">SC</option>
+                                <option value="RS">RS</option>
+                                <option value="SP">SP</option>
+                                <option value="RJ">RJ</option>
+                                <option value="MG">MG</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Observações:</label>
+                        <textarea id="modal-cliente-observacoes" rows="3"></textarea>
+                    </div>
+
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" onclick="fecharModal('modal-cliente')">
+                            Cancelar
+                        </button>
+                        <button type="submit" class="btn btn-primary">
+                            ✅ Salvar Cliente
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Nova Propriedade -->
+    <div id="modal-propriedade" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modal-propriedade-titulo">➕ Nova Propriedade</h3>
+                <button class="modal-close" onclick="fecharModal('modal-propriedade')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="form-propriedade" onsubmit="salvarPropriedade(event)">
+                    <input type="hidden" id="propriedade-id">
+
+                    <div class="form-group">
+                        <label>Cliente: *</label>
+                        <select id="modal-propriedade-cliente" required>
+                            <option value="">Selecione o cliente...</option>
+                        </select>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Nome da propriedade:</label>
+                            <input type="text" id="modal-propriedade-nome">
+                        </div>
+                        <div class="form-group">
+                            <label>Matrícula: *</label>
+                            <input type="text" id="modal-propriedade-matricula" required>
+                        </div>
+                    </div>
+
+                    <div class="form-row-3">
+                        <div class="form-group">
+                            <label>Município:</label>
+                            <input type="text" id="modal-propriedade-municipio">
+                        </div>
+                        <div class="form-group">
+                            <label>Tipo:</label>
+                            <select id="modal-propriedade-tipo">
+                                <option value="RURAL">Rural</option>
+                                <option value="URBANO">Urbano</option>
+                                <option value="LOTEAMENTO">Loteamento</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>UF:</label>
+                            <input type="text" id="modal-propriedade-uf" maxlength="2">
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Área (m²):</label>
+                            <input type="number" id="modal-propriedade-area" step="0.01">
+                        </div>
+                        <div class="form-group">
+                            <label>Perímetro (m):</label>
+                            <input type="number" id="modal-propriedade-perimetro" step="0.01">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Observações:</label>
+                        <textarea id="modal-propriedade-observacoes" rows="3"></textarea>
+                    </div>
+
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" onclick="fecharModal('modal-propriedade')">
+                            Cancelar
+                        </button>
+                        <button type="submit" class="btn btn-primary">
+                            ✅ Salvar Propriedade
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Importar Planilha de Marcos -->
+    <div id="modal-importar-planilha" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>📥 Importar Planilha de Marcos</h3>
+                <button class="modal-close" onclick="fecharModal('modal-importar-planilha')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p>Importe marcos geodésicos a partir de um arquivo CSV ou Excel (.xls, .xlsx)</p>
+
+                <div class="upload-area" style="margin: 20px 0;">
+                    <input type="file" id="arquivo-planilha-marcos" accept=".csv,.xls,.xlsx" style="display: none;">
+                    <button class="btn btn-upload" onclick="document.getElementById('arquivo-planilha-marcos').click()">
+                        📁 Selecionar Planilha
+                    </button>
+                    <p id="nome-planilha-selecionada" class="arquivo-info"></p>
+                </div>
+
+                <div class="mensagem mensagem-info">
+                    <strong>ℹ️ Formato esperado:</strong><br>
+                    A planilha deve conter as colunas: Nome, Tipo, Município, UF, Latitude, Longitude, Altitude, Ano_Implantacao
+                </div>
+
+                <div id="resultado-importacao-planilha"></div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="fecharModal('modal-importar-planilha')">
+                        Cancelar
+                    </button>
+                    <button type="button" class="btn btn-primary" id="btn-importar-planilha" onclick="importarPlanilhaMarcos()" disabled>
+                        ✅ Importar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <!-- Supercluster -->
+    <script src="https://unpkg.com/supercluster@8.0.1/dist/supercluster.min.js"></script>
+
+    <!-- Utilitário de debounce -->
+    <script>
+    function debounce(func, wait) {
+      let timeout;
+      return function executedFunction(...args) {
+        const later = () => {
+          clearTimeout(timeout);
+          func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+      };
+    }
+    </script>
+
+    <script src="js/clustering.js"></script>
+    <script src="js/performance-test.js"></script>
+    <script src="script.js"></script>
+    <script src="busca-raio.js"></script>
+    <script>
+        // Inicializar controle de busca por raio quando o mapa estiver pronto
+        document.addEventListener('DOMContentLoaded', () => {
+            // Aguardar 1 segundo para garantir que o mapa foi inicializado
+            setTimeout(() => {
+                if (typeof map !== 'undefined' && map) {
+                    adicionarControleBuscaRaio();
+                    console.log('✅ Controle de busca por raio inicializado');
+                } else {
+                    console.warn('⚠️ Mapa não encontrado, controle de busca não adicionado');
+                }
+            }, 1000);
+        });
+    </script>
+
+    <!-- Inicializar Lucide Icons -->
+    <script>
+        lucide.createIcons();
+    </script>
+</body>
+</html>

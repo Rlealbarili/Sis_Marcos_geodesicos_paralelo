@@ -22,7 +22,18 @@
       "Bash(xargs kill:*)",
       "Bash(cmd.exe //c \"taskkill //PID 14908 //F\")",
       "Bash(cmd.exe /c \"taskkill /PID 14908 /F\")",
-      "Bash(npm run test:premium:*)"
+      "Bash(npm run test:premium:*)",
+      "Bash(mkdir:*)",
+      "Bash(mv:*)",
+      "mcp__playwright__browser_navigate",
+      "mcp__playwright__browser_click",
+      "mcp__playwright__browser_handle_dialog",
+      "mcp__playwright__browser_snapshot",
+      "mcp__playwright__browser_console_messages",
+      "mcp__playwright__browser_take_screenshot",
+      "mcp__playwright__browser_evaluate",
+      "mcp__playwright__browser_press_key",
+      "mcp__playwright__browser_close"
     ],
     "deny": [],
     "ask": []

@@ -14,10 +14,18 @@
     "migrate:pg": "node backend/scripts/migrar-completo.js",
     "validate:pg": "node backend/scripts/validar-migracao.js",
     "test:api": "node backend/scripts/testar-api-postgres.js",
+    "test:clientes-propriedades": "node backend/scripts/test-api.js",
+    "cleanup": "bash scripts/cleanup-old-system.sh",
     "db:reset": "node backend/reset-database.js",
     "db:clean": "node backend/clean-migrations.js",
     "debug": "node playwright-debug-config.js",
-    "debug:headless": "set HEADLESS=true && node playwright-debug-config.js"
+    "debug:headless": "set HEADLESS=true && node playwright-debug-config.js",
+    "test:premium": "node test-premium.js",
+    "test": "playwright test",
+    "test:ui": "playwright test --ui",
+    "test:headed": "playwright test --headed",
+    "test:debug": "playwright test --debug",
+    "test:report": "playwright show-report"
   },
   "keywords": [
     "geodesia",
@@ -44,6 +52,7 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@playwright/test": "^1.56.1",
     "nodemon": "^3.0.2"
   }
 }
