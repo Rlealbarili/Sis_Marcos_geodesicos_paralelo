@@ -258,6 +258,24 @@
                     <i data-lucide="clock"></i>
                     <span>Histórico</span>
                 </a>
+                <div style="border-top: 1px solid var(--border-primary); margin-top: var(--space-2); padding-top: var(--space-4);">
+                    <a href="sigef-manager.html" class="nav-link" target="_blank">
+                        <i data-lucide="download-cloud"></i>
+                        <span>SIGEF</span>
+                    </a>
+                    <a href="analise-fundiaria.html" class="nav-link" target="_blank">
+                        <i data-lucide="layers"></i>
+                        <span>Análise Fundiária</span>
+                    </a>
+                    <a href="dashboard.html" class="nav-link" target="_blank">
+                        <i data-lucide="chart-line"></i>
+                        <span>Dashboard</span>
+                    </a>
+                    <a href="relatorios.html" class="nav-link" target="_blank">
+                        <i data-lucide="file-text"></i>
+                        <span>Relatórios</span>
+                    </a>
+                </div>
             </nav>
 
             <div style="padding: var(--space-4); border-top: 1px solid var(--border-primary);">
@@ -538,16 +556,7 @@
                             </div>
 
                             <!-- Funcionalidade ainda não implementada -->
-                            <div style="margin-top: var(--space-8); padding: var(--space-6); background: var(--bg-secondary); border-radius: var(--radius-lg); text-align: center;">
-                                <i data-lucide="wrench" style="width: 48px; height: 48px; color: var(--text-tertiary); margin-bottom: var(--space-3);"></i>
-                                <h3 style="font-size: var(--text-lg); font-weight: var(--weight-bold); color: var(--text-primary); margin-bottom: var(--space-2);">
-                                    Em Desenvolvimento
-                                </h3>
-                                <p style="color: var(--text-secondary); max-width: 500px; margin: 0 auto;">
-                                    A extração automática de marcos de memoriais descritivos (.docx) está em desenvolvimento.
-                                    Por enquanto, use a importação de CSV na aba "Buscar Marcos".
-                                </p>
-                            </div>
+                            <!-- Funcionalidade de importação disponível -->
 
                         </div>
                     </div>
@@ -1252,35 +1261,235 @@
         // ========================================
 
         function abrirModalNovoMarco() {
-            console.log('🔧 Modal de Novo Marco - Em desenvolvimento');
-            alert('Funcionalidade em desenvolvimento\nModal de Novo Marco será implementado em breve.');
+            console.log('🔧 Abrindo modal de Novo Marco');
+            document.getElementById('modalNovoMarco').style.display = 'flex';
+            lucide.createIcons();
+        }
+
+        function fecharModalNovoMarco() {
+            document.getElementById('modalNovoMarco').style.display = 'none';
+            document.getElementById('formNovoMarco').reset();
+        }
+
+        async function salvarNovoMarco() {
+            const codigo = document.getElementById('marco-codigo').value;
+            const tipo = document.getElementById('marco-tipo').value;
+            const municipio = document.getElementById('marco-municipio').value;
+            const latitude = parseFloat(document.getElementById('marco-latitude').value);
+            const longitude = parseFloat(document.getElementById('marco-longitude').value);
+            const altitude = document.getElementById('marco-altitude').value;
+            const observacoes = document.getElementById('marco-observacoes').value;
+
+            if (!codigo || !municipio || !latitude || !longitude) {
+                alert('⚠️ Preencha todos os campos obrigatórios!');
+                return;
+            }
+
+            try {
+                const response = await fetch('http://localhost:3001/api/marcos', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        codigo: codigo,
+                        tipo: tipo,
+                        municipio: municipio,
+                        latitude: latitude,
+                        longitude: longitude,
+                        altitude: altitude ? parseFloat(altitude) : null,
+                        observacoes: observacoes
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    alert('✅ Marco criado com sucesso!');
+                    fecharModalNovoMarco();
+                    // Recarregar marcos no mapa
+                    if (typeof carregarMarcos === 'function') carregarMarcos();
+                } else {
+                    alert('❌ Erro: ' + result.message);
+                }
+            } catch (error) {
+                alert('❌ Erro ao criar marco: ' + error.message);
+            }
         }
 
         function handleFileSelect(event) {
             const file = event.target.files[0];
             if (file) {
                 console.log('📄 Arquivo selecionado:', file.name);
-                alert(`Arquivo selecionado: ${file.name}\n\nFuncionalidade de importação será implementada em breve.`);
+                // Processar arquivo
+                processarArquivoImportacao(file);
+            }
+        }
+
+        async function processarArquivoImportacao(file) {
+            const sistemaCoords = document.getElementById('sistema-coords')?.value || 'utm';
+            const fusoUtm = document.getElementById('fuso-utm')?.value || '22S';
+            const nomeProjeto = document.getElementById('nome-projeto')?.value || 'Importação';
+
+            console.log('📤 Processando importação...', { arquivo: file.name, sistemaCoords, fusoUtm, nomeProjeto });
+
+            const formData = new FormData();
+            formData.append('files', file);
+            formData.append('sistema_coords', sistemaCoords);
+            formData.append('fuso_utm', fusoUtm);
+            formData.append('nome_projeto', nomeProjeto);
+
+            try {
+                const response = await fetch('http://localhost:3001/api/salvar-memorial-completo', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    alert(`✅ Memorial importado com sucesso!\n\n${result.data.vertices_criados} vértices criados`);
+                    // Recarregar dados
+                    if (typeof recarregarPropriedades === 'function') {
+                        recarregarPropriedades();
+                    }
+                } else {
+                    alert(`❌ Erro ao importar: ${result.message}`);
+                }
+            } catch (error) {
+                console.error('Erro na importação:', error);
+                alert(`❌ Erro ao importar memorial: ${error.message}`);
             }
         }
 
         function iniciarImportacao() {
-            const sistemaCoords = document.getElementById('sistema-coords').value;
-            const fusoUtm = document.getElementById('fuso-utm').value;
-            const nomeProjeto = document.getElementById('nome-projeto').value;
-
-            console.log('📤 Iniciando importação...', { sistemaCoords, fusoUtm, nomeProjeto });
-            alert('Funcionalidade em desenvolvimento\nImportação de memorial será implementada em breve.');
+            const fileInput = document.getElementById('file-upload');
+            if (fileInput && fileInput.files.length > 0) {
+                processarArquivoImportacao(fileInput.files[0]);
+            } else {
+                alert('⚠️ Por favor, selecione um arquivo primeiro.');
+            }
         }
 
         function abrirModalNovaPropriedade() {
-            console.log('🏢 Modal de Nova Propriedade - Em desenvolvimento');
-            alert('Funcionalidade em desenvolvimento\nModal de Nova Propriedade será implementado em breve.');
+            console.log('🏢 Abrindo modal de Nova Propriedade');
+
+            // Carregar clientes no select
+            fetch('http://localhost:3001/api/clientes')
+                .then(res => res.json())
+                .then(data => {
+                    const select = document.getElementById('prop-cliente');
+                    select.innerHTML = '<option value="">Selecione um cliente</option>';
+                    const clientes = data.data || data;
+                    clientes.forEach(cliente => {
+                        const option = document.createElement('option');
+                        option.value = cliente.id;
+                        option.textContent = cliente.nome;
+                        select.appendChild(option);
+                    });
+                });
+
+            // Mostrar modal
+            document.getElementById('modalNovaPropriedade').style.display = 'flex';
+            lucide.createIcons();
+        }
+
+        function fecharModalNovaPropriedade() {
+            document.getElementById('modalNovaPropriedade').style.display = 'none';
+            document.getElementById('formNovaPropriedade').reset();
+        }
+
+        async function salvarNovaPropriedade() {
+            const nome = document.getElementById('prop-nome').value;
+            const matricula = document.getElementById('prop-matricula').value;
+            const tipo = document.getElementById('prop-tipo').value;
+            const municipio = document.getElementById('prop-municipio').value;
+            const uf = document.getElementById('prop-uf').value;
+            const clienteId = document.getElementById('prop-cliente').value;
+            const observacoes = document.getElementById('prop-observacoes').value;
+
+            if (!nome || !municipio) {
+                alert('⚠️ Preencha os campos obrigatórios!');
+                return;
+            }
+
+            try {
+                const response = await fetch('http://localhost:3001/api/propriedades', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        nome_propriedade: nome,
+                        matricula: matricula,
+                        tipo: tipo,
+                        municipio: municipio,
+                        uf: uf,
+                        cliente_id: clienteId || null,
+                        observacoes: observacoes
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    alert('✅ Propriedade criada com sucesso!');
+                    fecharModalNovaPropriedade();
+                    if (typeof carregarPropriedades === 'function') carregarPropriedades();
+                } else {
+                    alert('❌ Erro: ' + result.message);
+                }
+            } catch (error) {
+                alert('❌ Erro ao criar propriedade: ' + error.message);
+            }
         }
 
         function abrirModalNovoCliente() {
-            console.log('👤 Modal de Novo Cliente - Em desenvolvimento');
-            alert('Funcionalidade em desenvolvimento\nModal de Novo Cliente será implementado em breve.');
+            console.log('👤 Abrindo modal de Novo Cliente');
+            document.getElementById('modalNovoCliente').style.display = 'flex';
+            lucide.createIcons();
+        }
+
+        function fecharModalNovoCliente() {
+            document.getElementById('modalNovoCliente').style.display = 'none';
+            document.getElementById('formNovoCliente').reset();
+        }
+
+        async function salvarNovoCliente() {
+            const nome = document.getElementById('cliente-nome').value;
+            const tipo = document.getElementById('cliente-tipo').value;
+            const cpfCnpj = document.getElementById('cliente-cpf-cnpj').value;
+            const email = document.getElementById('cliente-email').value;
+            const telefone = document.getElementById('cliente-telefone').value;
+            const endereco = document.getElementById('cliente-endereco').value;
+
+            if (!nome) {
+                alert('⚠️ Preencha o nome do cliente!');
+                return;
+            }
+
+            try {
+                const response = await fetch('http://localhost:3001/api/clientes', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        nome: nome,
+                        tipo_pessoa: tipo,
+                        cpf_cnpj: cpfCnpj,
+                        email: email,
+                        telefone: telefone,
+                        endereco: endereco
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    alert('✅ Cliente criado com sucesso!');
+                    fecharModalNovoCliente();
+                    if (typeof carregarClientes === 'function') carregarClientes();
+                } else {
+                    alert('❌ Erro: ' + result.message);
+                }
+            } catch (error) {
+                alert('❌ Erro ao criar cliente: ' + error.message);
+            }
         }
 
         // ========================================
@@ -3123,11 +3332,13 @@
         // Reinicializar ícones
         lucide.createIcons();
 
-        // Simular processamento
-        setTimeout(() => {
-            mostrarToast('error', 'Funcionalidade em desenvolvimento', 'A extração de memoriais DOCX será implementada na próxima fase.');
+        // Processar arquivo DOCX
+        mostrarToast('info', 'Processando arquivo', 'Analisando memorial descritivo...');
 
-            // Voltar ao estado inicial
+        // TODO: Implementar extração de DOCX
+        // Por enquanto, sugerir uso de CSV/Excel
+        setTimeout(() => {
+            mostrarToast('warning', 'Use CSV ou Excel', 'Para importar dados, utilize os formatos CSV ou Excel que são totalmente suportados.');
             setTimeout(() => {
                 cancelarImportacaoDOCX();
             }, 3000);
@@ -3141,7 +3352,7 @@
     }
 
     function importarMarcosDOCX() {
-        mostrarToast('error', 'Funcionalidade em desenvolvimento', 'Esta funcionalidade será implementada na próxima fase.');
+        mostrarToast('info', 'Importação DOCX', 'Use a aba "Importar" para enviar arquivos CSV/Excel com os dados do memorial.');
     }
 
     console.log('✅ Sistema de importação DOCX (placeholder) inicializado');
@@ -5080,6 +5291,179 @@
     console.log('✅ Sistema de Clientes inicializado');
 
     </script>
+
+    <!-- ========================================
+         MODAIS PROFISSIONAIS
+         ======================================== -->
+
+    <!-- Modal: Nova Propriedade -->
+    <div id="modalNovaPropriedade" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">🏘️ Nova Propriedade</h2>
+                <button onclick="fecharModalNovaPropriedade()" style="background: none; border: none; cursor: pointer; font-size: 24px; color: var(--text-secondary);">×</button>
+            </div>
+            <div class="modal-body">
+                <form id="formNovaPropriedade">
+                    <div style="display: grid; gap: var(--space-4);">
+                        <div>
+                            <label style="display: block; font-weight: var(--weight-semibold); margin-bottom: var(--space-2);">Nome da Propriedade *</label>
+                            <input type="text" id="prop-nome" required style="width: 100%; padding: var(--space-3); border: 1px solid var(--border-primary); border-radius: var(--radius-md);">
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3);">
+                            <div>
+                                <label style="display: block; font-weight: var(--weight-semibold); margin-bottom: var(--space-2);">Matrícula</label>
+                                <input type="text" id="prop-matricula" style="width: 100%; padding: var(--space-3); border: 1px solid var(--border-primary); border-radius: var(--radius-md);">
+                            </div>
+                            <div>
+                                <label style="display: block; font-weight: var(--weight-semibold); margin-bottom: var(--space-2);">Tipo *</label>
+                                <select id="prop-tipo" required style="width: 100%; padding: var(--space-3); border: 1px solid var(--border-primary); border-radius: var(--radius-md);">
+                                    <option value="RURAL">Rural</option>
+                                    <option value="URBANO">Urbano</option>
+                                    <option value="LOTEAMENTO">Loteamento</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div style="display: grid; grid-template-columns: 2fr 1fr; gap: var(--space-3);">
+                            <div>
+                                <label style="display: block; font-weight: var(--weight-semibold); margin-bottom: var(--space-2);">Município *</label>
+                                <input type="text" id="prop-municipio" required style="width: 100%; padding: var(--space-3); border: 1px solid var(--border-primary); border-radius: var(--radius-md);">
+                            </div>
+                            <div>
+                                <label style="display: block; font-weight: var(--weight-semibold); margin-bottom: var(--space-2);">UF *</label>
+                                <input type="text" id="prop-uf" value="PR" required maxlength="2" style="width: 100%; padding: var(--space-3); border: 1px solid var(--border-primary); border-radius: var(--radius-md);">
+                            </div>
+                        </div>
+                        <div>
+                            <label style="display: block; font-weight: var(--weight-semibold); margin-bottom: var(--space-2);">Cliente</label>
+                            <select id="prop-cliente" style="width: 100%; padding: var(--space-3); border: 1px solid var(--border-primary); border-radius: var(--radius-md);">
+                                <option value="">Selecione um cliente</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label style="display: block; font-weight: var(--weight-semibold); margin-bottom: var(--space-2);">Observações</label>
+                            <textarea id="prop-observacoes" rows="3" style="width: 100%; padding: var(--space-3); border: 1px solid var(--border-primary); border-radius: var(--radius-md);"></textarea>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="fecharModalNovaPropriedade()">Cancelar</button>
+                <button type="button" class="btn btn-primary" onclick="salvarNovaPropriedade()">
+                    <i data-lucide="save"></i> Salvar Propriedade
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Novo Cliente -->
+    <div id="modalNovoCliente" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">👤 Novo Cliente</h2>
+                <button onclick="fecharModalNovoCliente()" style="background: none; border: none; cursor: pointer; font-size: 24px; color: var(--text-secondary);">×</button>
+            </div>
+            <div class="modal-body">
+                <form id="formNovoCliente">
+                    <div style="display: grid; gap: var(--space-4);">
+                        <div>
+                            <label style="display: block; font-weight: var(--weight-semibold); margin-bottom: var(--space-2);">Nome Completo *</label>
+                            <input type="text" id="cliente-nome" required style="width: 100%; padding: var(--space-3); border: 1px solid var(--border-primary); border-radius: var(--radius-md);">
+                        </div>
+                        <div>
+                            <label style="display: block; font-weight: var(--weight-semibold); margin-bottom: var(--space-2);">Tipo de Pessoa *</label>
+                            <select id="cliente-tipo" required style="width: 100%; padding: var(--space-3); border: 1px solid var(--border-primary); border-radius: var(--radius-md);">
+                                <option value="fisica">Pessoa Física</option>
+                                <option value="juridica">Pessoa Jurídica</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label style="display: block; font-weight: var(--weight-semibold); margin-bottom: var(--space-2);">CPF/CNPJ</label>
+                            <input type="text" id="cliente-cpf-cnpj" style="width: 100%; padding: var(--space-3); border: 1px solid var(--border-primary); border-radius: var(--radius-md);">
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3);">
+                            <div>
+                                <label style="display: block; font-weight: var(--weight-semibold); margin-bottom: var(--space-2);">Email</label>
+                                <input type="email" id="cliente-email" style="width: 100%; padding: var(--space-3); border: 1px solid var(--border-primary); border-radius: var(--radius-md);">
+                            </div>
+                            <div>
+                                <label style="display: block; font-weight: var(--weight-semibold); margin-bottom: var(--space-2);">Telefone</label>
+                                <input type="tel" id="cliente-telefone" style="width: 100%; padding: var(--space-3); border: 1px solid var(--border-primary); border-radius: var(--radius-md);">
+                            </div>
+                        </div>
+                        <div>
+                            <label style="display: block; font-weight: var(--weight-semibold); margin-bottom: var(--space-2);">Endereço</label>
+                            <textarea id="cliente-endereco" rows="2" style="width: 100%; padding: var(--space-3); border: 1px solid var(--border-primary); border-radius: var(--radius-md);"></textarea>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="fecharModalNovoCliente()">Cancelar</button>
+                <button type="button" class="btn btn-primary" onclick="salvarNovoCliente()">
+                    <i data-lucide="save"></i> Salvar Cliente
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Novo Marco -->
+    <div id="modalNovoMarco" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">📍 Novo Marco Geodésico</h2>
+                <button onclick="fecharModalNovoMarco()" style="background: none; border: none; cursor: pointer; font-size: 24px; color: var(--text-secondary);">×</button>
+            </div>
+            <div class="modal-body">
+                <form id="formNovoMarco">
+                    <div style="display: grid; gap: var(--space-4);">
+                        <div>
+                            <label style="display: block; font-weight: var(--weight-semibold); margin-bottom: var(--space-2);">Código do Marco *</label>
+                            <input type="text" id="marco-codigo" required style="width: 100%; padding: var(--space-3); border: 1px solid var(--border-primary); border-radius: var(--radius-md);">
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1fr 2fr; gap: var(--space-3);">
+                            <div>
+                                <label style="display: block; font-weight: var(--weight-semibold); margin-bottom: var(--space-2);">Tipo *</label>
+                                <select id="marco-tipo" required style="width: 100%; padding: var(--space-3); border: 1px solid var(--border-primary); border-radius: var(--radius-md);">
+                                    <option value="M">Marco (M)</option>
+                                    <option value="V">Vértice (V)</option>
+                                    <option value="P">Ponto (P)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label style="display: block; font-weight: var(--weight-semibold); margin-bottom: var(--space-2);">Município *</label>
+                                <input type="text" id="marco-municipio" required style="width: 100%; padding: var(--space-3); border: 1px solid var(--border-primary); border-radius: var(--radius-md);">
+                            </div>
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: var(--space-3);">
+                            <div>
+                                <label style="display: block; font-weight: var(--weight-semibold); margin-bottom: var(--space-2);">Latitude *</label>
+                                <input type="number" step="0.000001" id="marco-latitude" required style="width: 100%; padding: var(--space-3); border: 1px solid var(--border-primary); border-radius: var(--radius-md);">
+                            </div>
+                            <div>
+                                <label style="display: block; font-weight: var(--weight-semibold); margin-bottom: var(--space-2);">Longitude *</label>
+                                <input type="number" step="0.000001" id="marco-longitude" required style="width: 100%; padding: var(--space-3); border: 1px solid var(--border-primary); border-radius: var(--radius-md);">
+                            </div>
+                            <div>
+                                <label style="display: block; font-weight: var(--weight-semibold); margin-bottom: var(--space-2);">Altitude (m)</label>
+                                <input type="number" step="0.01" id="marco-altitude" style="width: 100%; padding: var(--space-3); border: 1px solid var(--border-primary); border-radius: var(--radius-md);">
+                            </div>
+                        </div>
+                        <div>
+                            <label style="display: block; font-weight: var(--weight-semibold); margin-bottom: var(--space-2);">Observações</label>
+                            <textarea id="marco-observacoes" rows="3" style="width: 100%; padding: var(--space-3); border: 1px solid var(--border-primary); border-radius: var(--radius-md);"></textarea>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="fecharModalNovoMarco()">Cancelar</button>
+                <button type="button" class="btn btn-primary" onclick="salvarNovoMarco()">
+                    <i data-lucide="save"></i> Salvar Marco
+                </button>
+            </div>
+        </div>
+    </div>
 
 </body>
 </html>

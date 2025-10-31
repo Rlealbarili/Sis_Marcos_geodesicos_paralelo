@@ -2,7 +2,11 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 require('dotenv').config({ path: './backend/.env', override: true });
-const { query, transaction, healthCheck } = require('./database/postgres-connection');
+const { query, transaction, healthCheck, pool } = require('./database/postgres-connection');
+const SIGEFDownloader = require('./sigef-downloader');
+const SpatialAnalyzer = require('./spatial-analyzer');
+const ReportGenerator = require('./report-generator');
+const DataExporter = require('./data-exporter');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -367,6 +371,73 @@ app.get('/api/marcos/:codigo', async (req, res) => {
     }
 });
 
+// POST /api/marcos - Criar novo marco
+app.post('/api/marcos', async (req, res) => {
+    try {
+        const { codigo, tipo, municipio, estado, latitude, longitude, altitude, observacoes } = req.body;
+
+        console.log('[Criar Marco] Dados recebidos:', { codigo, tipo, municipio, latitude, longitude });
+
+        // Validação
+        if (!codigo || !municipio || !latitude || !longitude) {
+            return res.status(400).json({
+                success: false,
+                message: 'Campos obrigatórios: codigo, municipio, latitude, longitude'
+            });
+        }
+
+        // Verificar se já existe
+        const existente = await query('SELECT id FROM marcos_levantados WHERE codigo = $1', [codigo]);
+        if (existente.rows.length > 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'Já existe um marco com este código'
+            });
+        }
+
+        // Criar geometria PostGIS (SRID 4326 = WGS84)
+        const geomSQL = `ST_SetSRID(ST_MakePoint($1, $2), 4326)`;
+
+        // Inserir marco
+        const result = await query(`
+            INSERT INTO marcos_levantados
+            (codigo, tipo, municipio, estado, latitude, longitude, altitude, geom, observacoes, status)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, ${geomSQL}, $8, $9)
+            RETURNING id, codigo, tipo, municipio, estado, latitude, longitude, altitude,
+                      ST_AsGeoJSON(geom)::json as geojson, observacoes, status
+        `, [
+            codigo,
+            tipo || 'M',
+            municipio,
+            estado || 'PR',
+            latitude,
+            longitude,
+            altitude || null,
+            longitude, // para geom
+            latitude,  // para geom
+            observacoes || null,
+            'ATIVO'
+        ]);
+
+        console.log('[Criar Marco] ✅ Marco criado com ID:', result.rows[0].id);
+
+        res.json({
+            success: true,
+            message: 'Marco criado com sucesso!',
+            data: result.rows[0]
+        });
+
+    } catch (error) {
+        console.error('[Criar Marco] ❌ Erro:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Erro ao criar marco: ' + error.message
+        });
+    }
+});
+
+console.log('✅ Endpoint POST /api/marcos carregado');
+
 // ============================================
 // ROTAS: CLIENTES E PROPRIEDADES
 // ============================================
@@ -382,6 +453,912 @@ app.use('/api/propriedades', propriedadesRoutes);
 console.log('✅ Rotas de propriedades carregadas: /api/propriedades');
 
 // ============================================
+// ENDPOINT: Salvar Memorial Completo
+// ============================================
+
+app.post('/api/salvar-memorial-completo', async (req, res) => {
+    try {
+        const { cliente, propriedade, vertices } = req.body;
+
+        // VALIDAÇÕES
+        if (!propriedade || !vertices || !Array.isArray(vertices) || vertices.length < 3) {
+            return res.status(400).json({
+                success: false,
+                message: 'Dados incompletos. São necessários pelo menos 3 vértices.'
+            });
+        }
+
+        if (!propriedade.matricula) {
+            return res.status(400).json({
+                success: false,
+                message: 'Matrícula da propriedade é obrigatória.'
+            });
+        }
+
+        console.log('[Salvar Memorial] Iniciando salvamento...');
+        console.log(`[Salvar Memorial] Cliente: ${cliente.novo ? 'Novo' : `ID ${cliente.id}`}`);
+        console.log(`[Salvar Memorial] Vértices: ${vertices.length}`);
+
+        // Usar transação para garantir consistência
+        const result = await transaction(async (client) => {
+            // 1. SALVAR/BUSCAR CLIENTE
+            let clienteId;
+            if (cliente.novo) {
+                console.log('[Salvar Memorial] Criando novo cliente...');
+                const clienteResult = await client.query(
+                    `INSERT INTO clientes (nome, tipo_pessoa, cpf_cnpj, email, telefone, endereco, cidade, estado)
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                     RETURNING id`,
+                    [
+                        cliente.nome,
+                        cliente.tipo_pessoa || 'fisica',
+                        cliente.cpf_cnpj || null,
+                        cliente.email || null,
+                        cliente.telefone || null,
+                        cliente.endereco || null,
+                        cliente.cidade || null,
+                        cliente.estado || null
+                    ]
+                );
+                clienteId = clienteResult.rows[0].id;
+                console.log(`[Salvar Memorial] Cliente criado com ID: ${clienteId}`);
+            } else {
+                clienteId = cliente.id;
+                console.log(`[Salvar Memorial] Usando cliente existente ID: ${clienteId}`);
+            }
+
+            // 2. CONSTRUIR GEOMETRIA WKT
+            const pontos = vertices.map(v => `${v.coordenadas.e} ${v.coordenadas.n}`);
+
+            // Fechar o polígono (primeiro ponto = último ponto)
+            const primeiro = vertices[0];
+            const ultimo = vertices[vertices.length - 1];
+            const distancia = Math.sqrt(
+                Math.pow(ultimo.coordenadas.e - primeiro.coordenadas.e, 2) +
+                Math.pow(ultimo.coordenadas.n - primeiro.coordenadas.n, 2)
+            );
+
+            // Se o polígono não está fechado (distância > 1cm), adicionar primeiro vértice no final
+            if (distancia > 0.01) {
+                pontos.push(`${primeiro.coordenadas.e} ${primeiro.coordenadas.n}`);
+                console.log('[Salvar Memorial] Polígono fechado automaticamente');
+            }
+
+            const wkt = `POLYGON((${pontos.join(',')}))`;
+            console.log(`[Salvar Memorial] WKT: ${wkt.substring(0, 100)}...`);
+
+            // 3. SALVAR PROPRIEDADE COM GEOMETRY
+            console.log('[Salvar Memorial] Criando propriedade...');
+            const propResult = await client.query(
+                `INSERT INTO propriedades
+                 (nome_propriedade, cliente_id, matricula, tipo, municipio, comarca, uf,
+                  area_m2, perimetro_m, geometry)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, ST_GeomFromText($10, 31982))
+                 RETURNING id`,
+                [
+                    propriedade.nome_propriedade || 'Sem nome',
+                    clienteId,
+                    propriedade.matricula,
+                    propriedade.tipo || 'RURAL',
+                    propriedade.municipio || null,
+                    propriedade.comarca || null,
+                    propriedade.uf || null,
+                    propriedade.area_m2 || null,
+                    propriedade.perimetro_m || null,
+                    wkt
+                ]
+            );
+
+            const propriedadeId = propResult.rows[0].id;
+            console.log(`[Salvar Memorial] Propriedade criada com ID: ${propriedadeId}`);
+
+            // 4. CALCULAR ÁREA E PERÍMETRO VIA POSTGIS
+            console.log('[Salvar Memorial] Calculando área e perímetro via PostGIS...');
+            const calcResult = await client.query(
+                `UPDATE propriedades
+                 SET area_calculada = ST_Area(geometry),
+                     perimetro_calculado = ST_Perimeter(geometry)
+                 WHERE id = $1
+                 RETURNING area_calculada, perimetro_calculado,
+                           ST_AsGeoJSON(geometry) as geojson`,
+                [propriedadeId]
+            );
+
+            const geometryData = calcResult.rows[0];
+            console.log(`[Salvar Memorial] Área calculada: ${geometryData.area_calculada} m²`);
+            console.log(`[Salvar Memorial] Perímetro calculado: ${geometryData.perimetro_calculado} m`);
+
+            // 5. SALVAR VÉRTICES
+            console.log('[Salvar Memorial] Salvando vértices...');
+            for (let i = 0; i < vertices.length; i++) {
+                const v = vertices[i];
+                await client.query(
+                    `INSERT INTO vertices
+                     (propriedade_id, nome, ordem, utm_e, utm_n, latitude, longitude, utm_zona, datum)
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+                    [
+                        propriedadeId,
+                        v.nome || null,
+                        i + 1,
+                        v.coordenadas.e,
+                        v.coordenadas.n,
+                        v.coordenadas.lat_original || null,
+                        v.coordenadas.lon_original || null,
+                        v.coordenadas.utm_zona || '22S',
+                        v.coordenadas.datum || 'SIRGAS2000'
+                    ]
+                );
+            }
+            console.log(`[Salvar Memorial] ${vertices.length} vértices salvos`);
+
+            return {
+                cliente_id: clienteId,
+                propriedade_id: propriedadeId,
+                vertices_criados: vertices.length,
+                area_calculada: parseFloat(geometryData.area_calculada),
+                perimetro_calculado: parseFloat(geometryData.perimetro_calculado),
+                geojson: JSON.parse(geometryData.geojson)
+            };
+        });
+
+        console.log('[Salvar Memorial] ✅ Memorial salvo com sucesso!');
+
+        res.json({
+            success: true,
+            message: 'Memorial salvo com sucesso!',
+            data: result
+        });
+
+    } catch (error) {
+        console.error('[Salvar Memorial] ❌ Erro:', error.message);
+        console.error(error.stack);
+
+        res.status(500).json({
+            success: false,
+            message: 'Erro ao salvar memorial: ' + error.message
+        });
+    }
+});
+
+console.log('✅ Rota /api/salvar-memorial-completo carregada');
+
+// ============================================
+// ENDPOINT: Propriedades em GeoJSON
+// ============================================
+
+app.get('/api/propriedades/geojson', async (req, res) => {
+    try {
+        console.log('[GeoJSON] Buscando propriedades...');
+
+        const result = await query(`
+            SELECT
+                p.id,
+                p.nome_propriedade,
+                p.matricula,
+                p.tipo,
+                p.municipio,
+                p.uf,
+                p.area_m2,
+                p.area_calculada,
+                p.perimetro_m,
+                p.perimetro_calculado,
+                c.nome as cliente_nome,
+                ST_AsGeoJSON(p.geometry) as geometry
+            FROM propriedades p
+            LEFT JOIN clientes c ON p.cliente_id = c.id
+            WHERE p.geometry IS NOT NULL
+            AND p.ativo = true
+            ORDER BY p.created_at DESC
+        `);
+
+        console.log(`[GeoJSON] ${result.rows.length} propriedades encontradas`);
+
+        const geojson = {
+            type: 'FeatureCollection',
+            features: result.rows.map(row => ({
+                type: 'Feature',
+                properties: {
+                    id: row.id,
+                    nome: row.nome_propriedade,
+                    matricula: row.matricula,
+                    tipo: row.tipo,
+                    municipio: row.municipio,
+                    uf: row.uf,
+                    area_m2: parseFloat(row.area_m2) || 0,
+                    area_calculada: parseFloat(row.area_calculada) || 0,
+                    perimetro_m: parseFloat(row.perimetro_m) || 0,
+                    perimetro_calculado: parseFloat(row.perimetro_calculado) || 0,
+                    cliente: row.cliente_nome
+                },
+                geometry: JSON.parse(row.geometry)
+            }))
+        };
+
+        res.json(geojson);
+    } catch (error) {
+        console.error('[GeoJSON] Erro:', error.message);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+console.log('✅ Rota /api/propriedades/geojson carregada');
+
+// ============================================
+// ROTAS SIGEF/INCRA
+// ============================================
+
+const sigefDownloader = new SIGEFDownloader(pool);
+
+// Iniciar download de um estado
+app.post('/api/sigef/download/:estado', async (req, res) => {
+    try {
+        const { estado } = req.params;
+        const { tipo } = req.body;
+
+        console.log(`📥 Download solicitado: ${estado} - ${tipo || 'certificada_particular'}`);
+
+        // Executar download em background
+        sigefDownloader.downloadEstado(estado, tipo || 'certificada_particular')
+            .then(resultado => {
+                console.log(`✅ Download ${estado} finalizado:`, resultado);
+            })
+            .catch(error => {
+                console.error(`❌ Erro no download ${estado}:`, error);
+            });
+
+        res.json({
+            sucesso: true,
+            mensagem: `Download iniciado para ${estado}. Acompanhe o progresso em /api/sigef/downloads`
+        });
+
+    } catch (error) {
+        res.status(500).json({ erro: error.message });
+    }
+});
+
+// Download em lote (todos os estados)
+app.post('/api/sigef/download-lote', async (req, res) => {
+    try {
+        const { tipo } = req.body;
+
+        console.log(`📥 Download em lote solicitado: ${tipo || 'certificada_particular'}`);
+
+        // Executar em background
+        sigefDownloader.downloadTodosEstados(tipo || 'certificada_particular')
+            .then(resultados => {
+                console.log('✅ Download em lote finalizado:', resultados);
+            })
+            .catch(error => {
+                console.error('❌ Erro no download em lote:', error);
+            });
+
+        res.json({
+            sucesso: true,
+            mensagem: 'Download em lote iniciado. Acompanhe em /api/sigef/downloads'
+        });
+
+    } catch (error) {
+        res.status(500).json({ erro: error.message });
+    }
+});
+
+// Listar downloads
+app.get('/api/sigef/downloads', async (req, res) => {
+    try {
+        const result = await query(`
+            SELECT
+                id, estado, tipo, data_download, arquivo_nome,
+                arquivo_tamanho, total_registros, status, erro_mensagem
+            FROM sigef_downloads
+            ORDER BY data_download DESC
+            LIMIT 100
+        `);
+
+        res.json(result.rows);
+
+    } catch (error) {
+        res.status(500).json({ erro: error.message });
+    }
+});
+
+// Estatísticas de parcelas importadas
+app.get('/api/sigef/estatisticas', async (req, res) => {
+    try {
+        const stats = await query(`
+            SELECT
+                estado,
+                tipo_parcela,
+                COUNT(*) as total_parcelas,
+                SUM(area_hectares) as area_total_ha,
+                MIN(data_certificacao) as certificacao_mais_antiga,
+                MAX(data_certificacao) as certificacao_mais_recente
+            FROM sigef_parcelas
+            GROUP BY estado, tipo_parcela
+            ORDER BY estado, tipo_parcela
+        `);
+
+        const resumo = await query(`
+            SELECT
+                COUNT(*) as total_parcelas,
+                COUNT(DISTINCT estado) as total_estados,
+                SUM(area_hectares) as area_total_ha
+            FROM sigef_parcelas
+        `);
+
+        res.json({
+            resumo: resumo.rows[0],
+            por_estado: stats.rows
+        });
+
+    } catch (error) {
+        res.status(500).json({ erro: error.message });
+    }
+});
+
+// Buscar parcela SIGEF por ID (para visualização no mapa)
+app.get('/api/sigef/parcelas/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const result = await query(`
+            SELECT
+                id,
+                codigo_parcela,
+                proprietario,
+                area_hectares,
+                municipio,
+                matricula,
+                situacao_parcela,
+                ST_AsGeoJSON(geometry) as geometry
+            FROM sigef_parcelas
+            WHERE id = $1
+        `, [id]);
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ erro: 'Parcela não encontrada' });
+        }
+
+        res.json(result.rows[0]);
+
+    } catch (error) {
+        res.status(500).json({ erro: error.message });
+    }
+});
+
+// Buscar parcelas SIGEF
+app.get('/api/sigef/parcelas', async (req, res) => {
+    try {
+        const { estado, municipio, proprietario, limite } = req.query;
+
+        let sql = `
+            SELECT
+                id, codigo_parcela, numero_certificacao, tipo_parcela,
+                estado, municipio, area_hectares, proprietario, cpf_cnpj,
+                rt_nome, data_certificacao,
+                ST_AsGeoJSON(geometry) as geometry_json
+            FROM sigef_parcelas
+            WHERE 1=1
+        `;
+        const params = [];
+        let paramCount = 1;
+
+        if (estado) {
+            sql += ` AND estado = $${paramCount}`;
+            params.push(estado);
+            paramCount++;
+        }
+
+        if (municipio) {
+            sql += ` AND municipio ILIKE $${paramCount}`;
+            params.push(`%${municipio}%`);
+            paramCount++;
+        }
+
+        if (proprietario) {
+            sql += ` AND proprietario ILIKE $${paramCount}`;
+            params.push(`%${proprietario}%`);
+            paramCount++;
+        }
+
+        sql += ` ORDER BY data_certificacao DESC LIMIT ${parseInt(limite) || 100}`;
+
+        const result = await query(sql, params);
+
+        res.json(result.rows);
+
+    } catch (error) {
+        res.status(500).json({ erro: error.message });
+    }
+});
+
+console.log('✅ Rotas SIGEF carregadas');
+
+// ============================================
+// ROTAS DE ANÁLISE GEOESPACIAL
+// ============================================
+
+const spatialAnalyzer = new SpatialAnalyzer(pool);
+
+// Analisar sobreposições de propriedade
+app.post('/api/analise/sobreposicoes/:propriedadeId', async (req, res) => {
+    try {
+        const { propriedadeId } = req.params;
+
+        const resultado = await spatialAnalyzer.analisarSobreposicao(propriedadeId);
+
+        res.json(resultado);
+    } catch (error) {
+        res.status(500).json({ erro: error.message });
+    }
+});
+
+// Identificar confrontantes
+app.post('/api/analise/confrontantes/:propriedadeId', async (req, res) => {
+    try {
+        const { propriedadeId } = req.params;
+        const { raio } = req.body;
+
+        const resultado = await spatialAnalyzer.identificarConfrontantes(
+            propriedadeId,
+            raio || 100
+        );
+
+        res.json(resultado);
+    } catch (error) {
+        res.status(500).json({ erro: error.message });
+    }
+});
+
+// Calcular score de viabilidade
+app.get('/api/analise/score/:propriedadeId', async (req, res) => {
+    try {
+        const { propriedadeId } = req.params;
+
+        const resultado = await spatialAnalyzer.calcularScoreViabilidade(propriedadeId);
+
+        res.json(resultado);
+    } catch (error) {
+        res.status(500).json({ erro: error.message });
+    }
+});
+
+// Analisar área desenhada (PRÉ-cadastro)
+app.post('/api/analise/area-pre-cadastro', async (req, res) => {
+    try {
+        const { geometry_wkt, srid } = req.body;
+
+        if (!geometry_wkt) {
+            return res.status(400).json({ erro: 'geometry_wkt obrigatório' });
+        }
+
+        const resultado = await spatialAnalyzer.analisarAreaPreCadastro(
+            geometry_wkt,
+            srid || 31982
+        );
+
+        res.json(resultado);
+    } catch (error) {
+        res.status(500).json({ erro: error.message });
+    }
+});
+
+// Análise completa (sobreposições + confrontantes + score)
+app.post('/api/analise/completa/:propriedadeId', async (req, res) => {
+    try {
+        const { propriedadeId } = req.params;
+
+        const resultado = await spatialAnalyzer.analiseCompleta(propriedadeId);
+
+        res.json(resultado);
+    } catch (error) {
+        res.status(500).json({ erro: error.message });
+    }
+});
+
+// Listar propriedades com score de viabilidade
+app.get('/api/propriedades/com-score', async (req, res) => {
+    try {
+        const result = await pool.query(`
+            SELECT
+                p.id,
+                p.nome_propriedade,
+                p.matricula,
+                p.municipio,
+                p.area_calculada,
+                (SELECT score_total FROM calcular_score_viabilidade(p.id)) as score,
+                (SELECT nivel_risco FROM calcular_score_viabilidade(p.id)) as nivel_risco,
+                (SELECT tem_sobreposicao FROM calcular_score_viabilidade(p.id)) as tem_sobreposicao
+            FROM propriedades p
+            WHERE p.geometry IS NOT NULL
+            ORDER BY score ASC
+            LIMIT 50
+        `);
+
+        res.json(result.rows);
+    } catch (error) {
+        res.status(500).json({ erro: error.message });
+    }
+});
+
+// Estatísticas de análise
+app.get('/api/analise/estatisticas', async (req, res) => {
+    try {
+        const resultado = await spatialAnalyzer.getEstatisticas();
+        res.json(resultado);
+    } catch (error) {
+        res.status(500).json({ erro: error.message });
+    }
+});
+
+console.log('✅ Rotas de Análise Geoespacial carregadas');
+
+// Buscar propriedade por ID (com GeoJSON) - DEVE VIR DEPOIS DE ROTAS ESPECÍFICAS
+app.get('/api/propriedades/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const result = await query(`
+            SELECT
+                id,
+                nome_propriedade,
+                matricula,
+                tipo,
+                municipio,
+                area_m2,
+                area_calculada,
+                perimetro_calculado,
+                ST_AsGeoJSON(geometry) as geojson
+            FROM propriedades
+            WHERE id = $1
+        `, [id]);
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ erro: 'Propriedade não encontrada' });
+        }
+
+        res.json(result.rows[0]);
+
+    } catch (error) {
+        res.status(500).json({ erro: error.message });
+    }
+});
+
+// ============================================
+// ENDPOINT: Relatórios
+// ============================================
+
+const reportGenerator = require('./report-generator');
+
+// Relatório de Propriedades em PDF
+app.get('/api/relatorios/propriedades/pdf', async (req, res) => {
+    try {
+        console.log('[Relatório PDF] Gerando relatório de propriedades...');
+
+        // Buscar propriedades
+        const filtros = {};
+        let whereConditions = ['p.ativo = true'];
+        const params = [];
+
+        if (req.query.cliente_id) {
+            params.push(req.query.cliente_id);
+            whereConditions.push(`p.cliente_id = $${params.length}`);
+            filtros['Cliente ID'] = req.query.cliente_id;
+        }
+
+        if (req.query.municipio) {
+            params.push(req.query.municipio);
+            whereConditions.push(`p.municipio ILIKE $${params.length}`);
+            filtros['Município'] = req.query.municipio;
+        }
+
+        if (req.query.tipo) {
+            params.push(req.query.tipo);
+            whereConditions.push(`p.tipo = $${params.length}`);
+            filtros['Tipo'] = req.query.tipo;
+        }
+
+        const sql = `
+            SELECT
+                p.id,
+                p.nome_propriedade,
+                p.matricula,
+                p.tipo,
+                p.municipio,
+                p.uf,
+                p.area_m2,
+                p.perimetro_m,
+                p.observacoes,
+                c.nome as cliente_nome
+            FROM propriedades p
+            LEFT JOIN clientes c ON p.cliente_id = c.id
+            WHERE ${whereConditions.join(' AND ')}
+            ORDER BY p.nome_propriedade
+        `;
+
+        const result = await query(sql, params);
+
+        // Gerar PDF
+        const pdfResult = await reportGenerator.gerarPDFPropriedades(result.rows, filtros);
+
+        console.log(`[Relatório PDF] ✅ Gerado: ${pdfResult.filename}`);
+
+        // Enviar arquivo
+        res.download(pdfResult.filepath, pdfResult.filename, (err) => {
+            if (err) {
+                console.error('[Relatório PDF] Erro ao enviar arquivo:', err);
+                res.status(500).json({ error: 'Erro ao enviar relatório' });
+            }
+        });
+
+    } catch (error) {
+        console.error('[Relatório PDF] ❌ Erro:', error);
+        res.status(500).json({ error: 'Erro ao gerar relatório PDF: ' + error.message });
+    }
+});
+
+// Relatório de Propriedades em Excel
+app.get('/api/relatorios/propriedades/excel', async (req, res) => {
+    try {
+        console.log('[Relatório Excel] Gerando relatório de propriedades...');
+
+        const filtros = {};
+        let whereConditions = ['p.ativo = true'];
+        const params = [];
+
+        if (req.query.cliente_id) {
+            params.push(req.query.cliente_id);
+            whereConditions.push(`p.cliente_id = $${params.length}`);
+            filtros['Cliente ID'] = req.query.cliente_id;
+        }
+
+        if (req.query.municipio) {
+            params.push(req.query.municipio);
+            whereConditions.push(`p.municipio ILIKE $${params.length}`);
+            filtros['Município'] = req.query.municipio;
+        }
+
+        const sql = `
+            SELECT
+                p.id,
+                p.nome_propriedade,
+                p.matricula,
+                p.tipo,
+                p.municipio,
+                p.uf,
+                p.area_m2,
+                p.perimetro_m,
+                c.nome as cliente_nome
+            FROM propriedades p
+            LEFT JOIN clientes c ON p.cliente_id = c.id
+            WHERE ${whereConditions.join(' AND ')}
+            ORDER BY p.nome_propriedade
+        `;
+
+        const result = await query(sql, params);
+
+        const excelResult = await reportGenerator.gerarExcelPropriedades(result.rows, filtros);
+
+        console.log(`[Relatório Excel] ✅ Gerado: ${excelResult.filename}`);
+
+        res.download(excelResult.filepath, excelResult.filename, (err) => {
+            if (err) {
+                console.error('[Relatório Excel] Erro ao enviar arquivo:', err);
+                res.status(500).json({ error: 'Erro ao enviar relatório' });
+            }
+        });
+
+    } catch (error) {
+        console.error('[Relatório Excel] ❌ Erro:', error);
+        res.status(500).json({ error: 'Erro ao gerar relatório Excel: ' + error.message });
+    }
+});
+
+// Relatório de Propriedades em CSV
+app.get('/api/relatorios/propriedades/csv', async (req, res) => {
+    try {
+        console.log('[Relatório CSV] Gerando relatório de propriedades...');
+
+        let whereConditions = ['p.ativo = true'];
+        const params = [];
+
+        if (req.query.cliente_id) {
+            params.push(req.query.cliente_id);
+            whereConditions.push(`p.cliente_id = $${params.length}`);
+        }
+
+        if (req.query.municipio) {
+            params.push(req.query.municipio);
+            whereConditions.push(`p.municipio ILIKE $${params.length}`);
+        }
+
+        const sql = `
+            SELECT
+                p.id,
+                p.nome_propriedade,
+                p.matricula,
+                p.tipo,
+                p.municipio,
+                p.uf,
+                p.area_m2,
+                p.perimetro_m
+            FROM propriedades p
+            WHERE ${whereConditions.join(' AND ')}
+            ORDER BY p.nome_propriedade
+        `;
+
+        const result = await query(sql, params);
+
+        const csvResult = await reportGenerator.gerarCSVPropriedades(result.rows);
+
+        console.log(`[Relatório CSV] ✅ Gerado: ${csvResult.filename}`);
+
+        res.download(csvResult.filepath, csvResult.filename, (err) => {
+            if (err) {
+                console.error('[Relatório CSV] Erro ao enviar arquivo:', err);
+                res.status(500).json({ error: 'Erro ao enviar relatório' });
+            }
+        });
+
+    } catch (error) {
+        console.error('[Relatório CSV] ❌ Erro:', error);
+        res.status(500).json({ error: 'Erro ao gerar relatório CSV: ' + error.message });
+    }
+});
+
+// Relatório de Marcos Geodésicos em PDF
+app.get('/api/relatorios/marcos/pdf', async (req, res) => {
+    try {
+        console.log('[Relatório Marcos PDF] Gerando relatório...');
+
+        const filtros = {};
+        let whereConditions = ['1=1'];
+        const params = [];
+
+        if (req.query.municipio) {
+            params.push(req.query.municipio);
+            whereConditions.push(`municipio ILIKE $${params.length}`);
+            filtros['Município'] = req.query.municipio;
+        }
+
+        if (req.query.tipo) {
+            params.push(req.query.tipo);
+            whereConditions.push(`tipo = $${params.length}`);
+            filtros['Tipo'] = req.query.tipo;
+        }
+
+        if (req.query.status) {
+            params.push(req.query.status);
+            whereConditions.push(`status = $${params.length}`);
+            filtros['Status'] = req.query.status;
+        }
+
+        const sql = `
+            SELECT
+                id, codigo, tipo, municipio, estado,
+                latitude, longitude, altitude,
+                status, observacoes
+            FROM marcos_levantados
+            WHERE ${whereConditions.join(' AND ')}
+            ORDER BY codigo
+        `;
+
+        const result = await query(sql, params);
+
+        const pdfResult = await reportGenerator.gerarPDFMarcos(result.rows, filtros);
+
+        console.log(`[Relatório Marcos PDF] ✅ Gerado: ${pdfResult.filename}`);
+
+        res.download(pdfResult.filepath, pdfResult.filename, (err) => {
+            if (err) {
+                console.error('[Relatório Marcos PDF] Erro ao enviar arquivo:', err);
+                res.status(500).json({ error: 'Erro ao enviar relatório' });
+            }
+        });
+
+    } catch (error) {
+        console.error('[Relatório Marcos PDF] ❌ Erro:', error);
+        res.status(500).json({ error: 'Erro ao gerar relatório PDF: ' + error.message });
+    }
+});
+
+// Relatório de Marcos Geodésicos em Excel
+app.get('/api/relatorios/marcos/excel', async (req, res) => {
+    try {
+        console.log('[Relatório Marcos Excel] Gerando relatório...');
+
+        const filtros = {};
+        let whereConditions = ['1=1'];
+        const params = [];
+
+        if (req.query.municipio) {
+            params.push(req.query.municipio);
+            whereConditions.push(`municipio ILIKE $${params.length}`);
+            filtros['Município'] = req.query.municipio;
+        }
+
+        if (req.query.tipo) {
+            params.push(req.query.tipo);
+            whereConditions.push(`tipo = $${params.length}`);
+            filtros['Tipo'] = req.query.tipo;
+        }
+
+        const sql = `
+            SELECT
+                id, codigo, tipo, municipio, estado,
+                latitude, longitude, altitude, status
+            FROM marcos_levantados
+            WHERE ${whereConditions.join(' AND ')}
+            ORDER BY codigo
+        `;
+
+        const result = await query(sql, params);
+
+        const excelResult = await reportGenerator.gerarExcelMarcos(result.rows, filtros);
+
+        console.log(`[Relatório Marcos Excel] ✅ Gerado: ${excelResult.filename}`);
+
+        res.download(excelResult.filepath, excelResult.filename, (err) => {
+            if (err) {
+                console.error('[Relatório Marcos Excel] Erro ao enviar arquivo:', err);
+                res.status(500).json({ error: 'Erro ao enviar relatório' });
+            }
+        });
+
+    } catch (error) {
+        console.error('[Relatório Marcos Excel] ❌ Erro:', error);
+        res.status(500).json({ error: 'Erro ao gerar relatório Excel: ' + error.message });
+    }
+});
+
+// Relatório de Marcos Geodésicos em CSV
+app.get('/api/relatorios/marcos/csv', async (req, res) => {
+    try {
+        console.log('[Relatório Marcos CSV] Gerando relatório...');
+
+        let whereConditions = ['1=1'];
+        const params = [];
+
+        if (req.query.municipio) {
+            params.push(req.query.municipio);
+            whereConditions.push(`municipio ILIKE $${params.length}`);
+        }
+
+        if (req.query.tipo) {
+            params.push(req.query.tipo);
+            whereConditions.push(`tipo = $${params.length}`);
+        }
+
+        const sql = `
+            SELECT
+                id, codigo, tipo, municipio, estado,
+                latitude, longitude, altitude, status
+            FROM marcos_levantados
+            WHERE ${whereConditions.join(' AND ')}
+            ORDER BY codigo
+        `;
+
+        const result = await query(sql, params);
+
+        const csvResult = await reportGenerator.gerarCSVMarcos(result.rows);
+
+        console.log(`[Relatório Marcos CSV] ✅ Gerado: ${csvResult.filename}`);
+
+        res.download(csvResult.filepath, csvResult.filename, (err) => {
+            if (err) {
+                console.error('[Relatório Marcos CSV] Erro ao enviar arquivo:', err);
+                res.status(500).json({ error: 'Erro ao enviar relatório' });
+            }
+        });
+
+    } catch (error) {
+        console.error('[Relatório Marcos CSV] ❌ Erro:', error);
+        res.status(500).json({ error: 'Erro ao gerar relatório CSV: ' + error.message });
+    }
+});
+
+console.log('✅ Rotas de relatórios carregadas');
+
+// ============================================
 // SPA FALLBACK - Redirecionar para index.html
 // ============================================
 
@@ -395,6 +1372,439 @@ app.get('*', (req, res, next) => {
     // Caso contrário, servir o index.html (Sistema Premium)
     res.sendFile(path.join(__dirname, '../frontend/index.html'));
 });
+
+// =====================================================
+// MÓDULOS DE RELATÓRIOS
+// =====================================================
+
+const dataExporter = new DataExporter();
+
+// =====================================================
+// ENDPOINT: Relatório de Análise Completa (PDF)
+// =====================================================
+
+app.post('/api/relatorios/analise-completa/:propriedadeId', async (req, res) => {
+    try {
+        const { propriedadeId} = req.params;
+        console.log(`📄 Gerando relatório de análise completa para propriedade ${propriedadeId}`);
+
+        // Obter análise completa usando SpatialAnalyzer existente
+        const analiseCompleta = await spatialAnalyzer.analiseCompleta(propriedadeId);
+
+        if (!analiseCompleta || !analiseCompleta.sucesso) {
+            return res.status(404).json({ error: 'Propriedade não encontrada ou erro na análise' });
+        }
+
+        // Obter dados da propriedade
+        const propResult = await query('SELECT * FROM propriedades WHERE id = $1', [propriedadeId]);
+        analiseCompleta.propriedade = propResult.rows[0];
+
+        // Gerar PDF
+        const pdfPath = await reportGenerator.gerarRelatorioAnaliseCompleta(propriedadeId, analiseCompleta);
+
+        // Enviar arquivo para download
+        res.download(pdfPath, `analise_completa_${propriedadeId}.pdf`, (err) => {
+            if (err) {
+                console.error('Erro ao enviar PDF:', err);
+                res.status(500).json({ error: 'Erro ao enviar relatório' });
+            }
+        });
+
+    } catch (error) {
+        console.error('Erro ao gerar relatório de análise completa:', error);
+        res.status(500).json({
+            error: 'Erro ao gerar relatório',
+            message: error.message
+        });
+    }
+});
+
+// =====================================================
+// ENDPOINT: Relatório de Confrontantes (PDF)
+// =====================================================
+
+app.post('/api/relatorios/confrontantes/:propriedadeId', async (req, res) => {
+    try {
+        const { propriedadeId } = req.params;
+        console.log(`📄 Gerando relatório de confrontantes para propriedade ${propriedadeId}`);
+
+        // Obter confrontantes usando SpatialAnalyzer
+        const resultado = await spatialAnalyzer.identificarConfrontantes(propriedadeId, 100);
+        const confrontantes = resultado.sucesso ? resultado.confrontantes : [];
+
+        // Gerar PDF
+        const pdfPath = await reportGenerator.gerarRelatorioConfrontantes(propriedadeId, confrontantes);
+
+        // Enviar arquivo para download
+        res.download(pdfPath, `confrontantes_${propriedadeId}.pdf`, (err) => {
+            if (err) {
+                console.error('Erro ao enviar PDF:', err);
+                res.status(500).json({ error: 'Erro ao enviar relatório' });
+            }
+        });
+
+    } catch (error) {
+        console.error('Erro ao gerar relatório de confrontantes:', error);
+        res.status(500).json({
+            error: 'Erro ao gerar relatório',
+            message: error.message
+        });
+    }
+});
+
+// =====================================================
+// ENDPOINT: Relatório de Viabilidade (PDF)
+// =====================================================
+
+app.post('/api/relatorios/viabilidade/:propriedadeId', async (req, res) => {
+    try {
+        const { propriedadeId } = req.params;
+        console.log(`📄 Gerando relatório de viabilidade para propriedade ${propriedadeId}`);
+
+        // Obter análise completa
+        const analise = await spatialAnalyzer.analiseCompleta(propriedadeId);
+
+        if (!analise || !analise.sucesso) {
+            return res.status(404).json({ error: 'Propriedade não encontrada' });
+        }
+
+        // Calcular viabilidade baseado no score e sobreposições
+        const scoreTotal = analise.score?.score_total || 0;
+        const viabilidade = {
+            score: analise.score,
+            sobreposicoes: analise.sobreposicoes,
+            confrontantes: analise.confrontantes,
+            parecer: scoreTotal >= 80 ? 'VIÁVEL' :
+                     scoreTotal >= 60 ? 'VIÁVEL COM RESSALVAS' : 'NÃO VIÁVEL'
+        };
+
+        // Gerar PDF
+        const pdfPath = await reportGenerator.gerarRelatorioViabilidade(propriedadeId, viabilidade);
+
+        // Enviar arquivo para download
+        res.download(pdfPath, `viabilidade_${propriedadeId}.pdf`, (err) => {
+            if (err) {
+                console.error('Erro ao enviar PDF:', err);
+                res.status(500).json({ error: 'Erro ao enviar relatório' });
+            }
+        });
+
+    } catch (error) {
+        console.error('Erro ao gerar relatório de viabilidade:', error);
+        res.status(500).json({
+            error: 'Erro ao gerar relatório',
+            message: error.message
+        });
+    }
+});
+
+// =====================================================
+// ENDPOINT: Confrontantes Excel
+// =====================================================
+
+app.post('/api/relatorios/confrontantes-excel/:propriedadeId', async (req, res) => {
+    try {
+        const { propriedadeId } = req.params;
+        console.log(`📊 Exportando confrontantes para Excel - propriedade ${propriedadeId}`);
+
+        // Obter confrontantes
+        const resultado = await spatialAnalyzer.identificarConfrontantes(propriedadeId, 100);
+        const confrontantes = resultado.sucesso ? resultado.confrontantes : [];
+
+        // Gerar Excel
+        const excelPath = await dataExporter.exportarConfrontantesExcel(propriedadeId, confrontantes);
+
+        // Enviar arquivo para download
+        res.download(excelPath, `confrontantes_${propriedadeId}.xlsx`, (err) => {
+            if (err) {
+                console.error('Erro ao enviar Excel:', err);
+                res.status(500).json({ error: 'Erro ao enviar arquivo' });
+            }
+        });
+
+    } catch (error) {
+        console.error('Erro ao exportar confrontantes para Excel:', error);
+        res.status(500).json({
+            error: 'Erro ao exportar dados',
+            message: error.message
+        });
+    }
+});
+
+// =====================================================
+// ENDPOINT: Confrontantes CSV
+// =====================================================
+
+app.post('/api/relatorios/confrontantes-csv/:propriedadeId', async (req, res) => {
+    try {
+        const { propriedadeId } = req.params;
+        console.log(`📊 Exportando confrontantes para CSV - propriedade ${propriedadeId}`);
+
+        // Obter confrontantes
+        const resultado = await spatialAnalyzer.identificarConfrontantes(propriedadeId, 100);
+        const confrontantes = resultado.sucesso ? resultado.confrontantes : [];
+
+        // Gerar CSV
+        const csvPath = await dataExporter.exportarConfrontantesCSV(propriedadeId, confrontantes);
+
+        // Enviar arquivo para download
+        res.download(csvPath, `confrontantes_${propriedadeId}.csv`, (err) => {
+            if (err) {
+                console.error('Erro ao enviar CSV:', err);
+                res.status(500).json({ error: 'Erro ao enviar arquivo' });
+            }
+        });
+
+    } catch (error) {
+        console.error('Erro ao exportar confrontantes para CSV:', error);
+        res.status(500).json({
+            error: 'Erro ao exportar dados',
+            message: error.message
+        });
+    }
+});
+
+// =====================================================
+// ENDPOINT: Sobreposições Excel
+// =====================================================
+
+app.post('/api/relatorios/sobreposicoes-excel/:propriedadeId', async (req, res) => {
+    try {
+        const { propriedadeId } = req.params;
+        console.log(`📊 Exportando sobreposições para Excel - propriedade ${propriedadeId}`);
+
+        // Obter sobreposições
+        const resultado = await spatialAnalyzer.analisarSobreposicao(propriedadeId);
+        const sobreposicoes = resultado.sucesso ? resultado.sobreposicoes : [];
+
+        // Gerar Excel
+        const excelPath = await dataExporter.exportarSobreposicoesExcel(propriedadeId, sobreposicoes);
+
+        // Enviar arquivo para download
+        res.download(excelPath, `sobreposicoes_${propriedadeId}.xlsx`, (err) => {
+            if (err) {
+                console.error('Erro ao enviar Excel:', err);
+                res.status(500).json({ error: 'Erro ao enviar arquivo' });
+            }
+        });
+
+    } catch (error) {
+        console.error('Erro ao exportar sobreposições para Excel:', error);
+        res.status(500).json({
+            error: 'Erro ao exportar dados',
+            message: error.message
+        });
+    }
+});
+
+// =====================================================
+// DASHBOARD - ESTATÍSTICAS EXECUTIVAS
+// =====================================================
+
+app.get('/api/dashboard/estatisticas', async (req, res) => {
+    try {
+        console.log('📊 Buscando estatísticas do dashboard...');
+
+        // 1. Estatísticas gerais de propriedades
+        const statsPropriedades = await pool.query(`
+            SELECT
+                COUNT(*) as total_propriedades,
+                COUNT(CASE WHEN tipo = 'RURAL' THEN 1 END) as total_rural,
+                COUNT(CASE WHEN tipo = 'URBANA' THEN 1 END) as total_urbana,
+                COALESCE(SUM(area_calculada), 0) as area_total_m2,
+                COALESCE(SUM(area_calculada)/10000, 0) as area_total_hectares,
+                COUNT(CASE WHEN geometry IS NOT NULL THEN 1 END) as com_geometria,
+                COUNT(DISTINCT cliente_id) as total_clientes,
+                COUNT(DISTINCT municipio) as total_municipios
+            FROM propriedades
+            WHERE ativo = true
+        `);
+
+        // 2. Estatísticas de marcos geodésicos
+        const statsMarcos = await pool.query(`
+            SELECT
+                COUNT(*) as total_marcos,
+                COUNT(CASE WHEN latitude IS NOT NULL AND longitude IS NOT NULL THEN 1 END) as marcos_levantados,
+                COUNT(DISTINCT tipo) as tipos_marcos,
+                COUNT(CASE WHEN observacoes IS NOT NULL THEN 1 END) as com_observacoes
+            FROM marcos_levantados
+        `);
+
+        // 3. Estatísticas SIGEF
+        const statsSIGEF = await pool.query(`
+            SELECT
+                COUNT(*) as total_parcelas_sigef,
+                COUNT(DISTINCT estado) as estados_importados,
+                COALESCE(SUM(area_hectares), 0) as area_total_sigef_ha,
+                COUNT(CASE WHEN tipo_parcela = 'particular' THEN 1 END) as parcelas_particulares,
+                COUNT(CASE WHEN tipo_parcela = 'publico' THEN 1 END) as parcelas_publicas
+            FROM sigef_parcelas
+        `);
+
+        // 4. Análise de riscos (propriedades com score) - simplificado para performance
+        const statsRiscos = await pool.query(`
+            SELECT
+                COUNT(*) as total_analisadas,
+                0 as risco_baixo,
+                0 as risco_medio,
+                0 as risco_alto
+            FROM propriedades p
+            WHERE p.geometry IS NOT NULL
+        `);
+
+        // 5. Sobreposições detectadas
+        const statsSobreposicoes = await pool.query(`
+            SELECT
+                COUNT(DISTINCT propriedade_local_id) as propriedades_com_sobreposicao,
+                COUNT(*) as total_sobreposicoes,
+                COALESCE(SUM(area_sobreposicao_m2), 0) as area_total_sobreposta
+            FROM sigef_sobreposicoes
+            WHERE status = 'pendente'
+        `);
+
+        // 6. Confrontantes identificados
+        const statsConfrontantes = await pool.query(`
+            SELECT
+                COUNT(DISTINCT parcela_id) as propriedades_com_confrontantes,
+                COUNT(*) as total_confrontantes,
+                COUNT(CASE WHEN tipo_contato = 'limite_comum' THEN 1 END) as limites_comuns
+            FROM sigef_confrontantes
+        `);
+
+        // 7. Distribuição por estado
+        const distribEstados = await pool.query(`
+            SELECT
+                COALESCE(uf, 'N/A') as estado,
+                COUNT(*) as quantidade,
+                COALESCE(SUM(area_calculada/10000), 0) as area_total_ha
+            FROM propriedades
+            WHERE ativo = true
+            GROUP BY uf
+            ORDER BY quantidade DESC
+            LIMIT 10
+        `);
+
+        // 8. Distribuição por município (top 10)
+        const distribMunicipios = await pool.query(`
+            SELECT
+                COALESCE(municipio, 'N/A') as municipio,
+                COALESCE(uf, '') as estado,
+                COUNT(*) as quantidade
+            FROM propriedades
+            WHERE ativo = true
+            GROUP BY municipio, uf
+            ORDER BY quantidade DESC
+            LIMIT 10
+        `);
+
+        // 9. Timeline de atividades (últimos 30 dias)
+        const timeline = await pool.query(`
+            SELECT
+                DATE(created_at) as data,
+                COUNT(*) as atividades
+            FROM (
+                SELECT created_at FROM propriedades WHERE created_at >= NOW() - INTERVAL '30 days'
+                UNION ALL
+                SELECT criado_em as created_at FROM marcos_levantados WHERE criado_em >= NOW() - INTERVAL '30 days'
+            ) t
+            GROUP BY DATE(created_at)
+            ORDER BY data DESC
+            LIMIT 30
+        `);
+
+        // Montar resposta
+        res.json({
+            sucesso: true,
+            data_atualizacao: new Date().toISOString(),
+            propriedades: statsPropriedades.rows[0],
+            marcos: statsMarcos.rows[0],
+            sigef: statsSIGEF.rows[0],
+            riscos: statsRiscos.rows[0],
+            sobreposicoes: statsSobreposicoes.rows[0],
+            confrontantes: statsConfrontantes.rows[0],
+            distribuicao: {
+                por_estado: distribEstados.rows,
+                por_municipio: distribMunicipios.rows
+            },
+            timeline: timeline.rows
+        });
+
+    } catch (error) {
+        console.error('Erro ao buscar estatísticas:', error);
+        res.status(500).json({
+            sucesso: false,
+            erro: error.message
+        });
+    }
+});
+
+// Estatísticas de análises por período
+app.get('/api/dashboard/analises-periodo', async (req, res) => {
+    try {
+        const { periodo } = req.query; // 'dia', 'semana', 'mes'
+
+        let intervalo = '1 day';
+        if (periodo === 'semana') intervalo = '7 days';
+        if (periodo === 'mes') intervalo = '30 days';
+
+        const result = await pool.query(`
+            SELECT
+                DATE(analisado_em) as data,
+                COUNT(*) as total_analises,
+                COUNT(CASE WHEN tipo_sobreposicao = 'total_propriedade_dentro' THEN 1 END) as sobreposicoes_totais,
+                COUNT(CASE WHEN tipo_sobreposicao = 'parcial' THEN 1 END) as sobreposicoes_parciais
+            FROM sigef_sobreposicoes
+            WHERE analisado_em >= NOW() - INTERVAL '${intervalo}'
+            GROUP BY DATE(analisado_em)
+            ORDER BY data DESC
+        `);
+
+        res.json({
+            sucesso: true,
+            periodo: periodo || 'dia',
+            dados: result.rows
+        });
+
+    } catch (error) {
+        res.status(500).json({ erro: error.message });
+    }
+});
+
+// Top propriedades por área
+app.get('/api/dashboard/top-propriedades', async (req, res) => {
+    try {
+        const { limite } = req.query;
+
+        const result = await pool.query(`
+            SELECT
+                p.id,
+                p.nome_propriedade,
+                p.municipio,
+                p.uf,
+                p.tipo,
+                p.area_calculada,
+                p.area_calculada/10000 as area_hectares,
+                c.nome as cliente_nome,
+                0 as score
+            FROM propriedades p
+            LEFT JOIN clientes c ON p.cliente_id = c.id
+            WHERE p.geometry IS NOT NULL
+            AND p.ativo = true
+            ORDER BY p.area_calculada DESC
+            LIMIT $1
+        `, [limite || 10]);
+
+        res.json({
+            sucesso: true,
+            propriedades: result.rows
+        });
+
+    } catch (error) {
+        res.status(500).json({ erro: error.message });
+    }
+});
+
+console.log('✅ Rotas de dashboard carregadas');
 
 // ============================================
 // ERROR HANDLER

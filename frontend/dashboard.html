@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Executivo - Sistema FHV</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        .dashboard-container {
+            padding: 20px;
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+
+        .page-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+
+        .page-header h1 {
+            margin: 0;
+            font-size: 32px;
+            color: #2c3e50;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .refresh-btn {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 20px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+
+        .refresh-btn:hover {
+            background: #0056b3;
+            transform: translateY(-2px);
+        }
+
+        .refresh-btn.export {
+            background: #28a745;
+        }
+
+        .refresh-btn.export:hover {
+            background: #1e7e34;
+        }
+
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .kpi-card {
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            transition: all 0.3s;
+            border-left: 4px solid #007bff;
+        }
+
+        .kpi-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+
+        .kpi-card.success { border-left-color: #28a745; }
+        .kpi-card.warning { border-left-color: #ffc107; }
+        .kpi-card.danger { border-left-color: #dc3545; }
+        .kpi-card.info { border-left-color: #17a2b8; }
+
+        .kpi-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .kpi-title {
+            font-size: 14px;
+            color: #6c757d;
+            font-weight: 500;
+            text-transform: uppercase;
+        }
+
+        .kpi-icon {
+            font-size: 24px;
+            opacity: 0.3;
+        }
+
+        .kpi-value {
+            font-size: 36px;
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 5px;
+        }
+
+        .kpi-subtitle {
+            font-size: 13px;
+            color: #6c757d;
+        }
+
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .chart-card {
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .chart-card h3 {
+            margin: 0 0 20px 0;
+            font-size: 18px;
+            color: #2c3e50;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 300px;
+        }
+
+        .table-section {
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+        }
+
+        .table-section h3 {
+            margin: 0 0 20px 0;
+            font-size: 18px;
+            color: #2c3e50;
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .data-table th {
+            background: #f8f9fa;
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+            color: #495057;
+            border-bottom: 2px solid #dee2e6;
+        }
+
+        .data-table td {
+            padding: 12px;
+            border-bottom: 1px solid #dee2e6;
+        }
+
+        .data-table tr:hover {
+            background: #f8f9fa;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .badge-success { background: #d4edda; color: #155724; }
+        .badge-warning { background: #fff3cd; color: #856404; }
+        .badge-danger { background: #f8d7da; color: #721c24; }
+        .badge-info { background: #d1ecf1; color: #0c5460; }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #6c757d;
+        }
+
+        .loading i {
+            font-size: 48px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-container">
+        <div class="page-header">
+            <div>
+                <h1><i class="fas fa-chart-line"></i> Dashboard Executivo</h1>
+                <p style="margin: 5px 0 0 0; color: #6c757d;">
+                    Última atualização: <span id="lastUpdate">Carregando...</span>
+                </p>
+            </div>
+            <div class="header-actions">
+                <button class="refresh-btn" onclick="carregarDados()">
+                    <i class="fas fa-sync-alt"></i> Atualizar Dados
+                </button>
+                <a href="index.html" class="refresh-btn" style="text-decoration: none; background: #6c757d;">
+                    <i class="fas fa-home"></i> Voltar
+                </a>
+            </div>
+        </div>
+
+        <div id="loadingOverlay" class="loading" style="display: none;">
+            <i class="fas fa-spinner"></i>
+            <p>Carregando estatísticas...</p>
+        </div>
+
+        <div id="dashboardContent" style="display: none;">
+            <!-- KPIs Principais -->
+            <div class="kpi-grid" id="kpiGrid"></div>
+
+            <!-- Gráficos -->
+            <div class="charts-grid">
+                <div class="chart-card">
+                    <h3><i class="fas fa-chart-pie"></i> Distribuição por Tipo</h3>
+                    <div class="chart-container">
+                        <canvas id="chartTipos"></canvas>
+                    </div>
+                </div>
+
+                <div class="chart-card">
+                    <h3><i class="fas fa-chart-bar"></i> Propriedades por Estado</h3>
+                    <div class="chart-container">
+                        <canvas id="chartEstados"></canvas>
+                    </div>
+                </div>
+
+                <div class="chart-card">
+                    <h3><i class="fas fa-exclamation-triangle"></i> Análise de Riscos</h3>
+                    <div class="chart-container">
+                        <canvas id="chartRiscos"></canvas>
+                    </div>
+                </div>
+
+                <div class="chart-card">
+                    <h3><i class="fas fa-calendar-alt"></i> Atividades (30 dias)</h3>
+                    <div class="chart-container">
+                        <canvas id="chartTimeline"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tabelas -->
+            <div class="table-section">
+                <h3><i class="fas fa-list"></i> Top 10 Municípios</h3>
+                <table class="data-table" id="tableMunicipios"></table>
+            </div>
+
+            <div class="table-section">
+                <h3><i class="fas fa-trophy"></i> Maiores Propriedades</h3>
+                <table class="data-table" id="tablePropriedades"></table>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+    <script>
+        let dadosGlobais = null;
+
+        async function carregarDados() {
+            try {
+                document.getElementById('loadingOverlay').style.display = 'block';
+                document.getElementById('dashboardContent').style.display = 'none';
+
+                const response = await fetch('/api/dashboard/estatisticas');
+                const dados = await response.json();
+
+                if (!dados.sucesso) {
+                    throw new Error('Erro ao carregar dados');
+                }
+
+                dadosGlobais = dados;
+
+                // Atualizar timestamp
+                const dataAtualizacao = new Date(dados.data_atualizacao);
+                document.getElementById('lastUpdate').textContent =
+                    dataAtualizacao.toLocaleString('pt-BR');
+
+                // Renderizar KPIs
+                renderizarKPIs(dados);
+
+                // Renderizar gráficos
+                renderizarGraficos(dados);
+
+                // Carregar dados adicionais
+                await carregarTopPropriedades();
+
+                // Renderizar tabela de municípios
+                renderizarTabelaMunicipios(dados.distribuicao.por_municipio);
+
+                document.getElementById('loadingOverlay').style.display = 'none';
+                document.getElementById('dashboardContent').style.display = 'block';
+
+            } catch (error) {
+                console.error('Erro ao carregar dashboard:', error);
+                alert('Erro ao carregar dados do dashboard');
+                document.getElementById('loadingOverlay').style.display = 'none';
+            }
+        }
+
+        function renderizarKPIs(dados) {
+            const kpis = [
+                {
+                    titulo: 'Total de Propriedades',
+                    valor: Number(dados.propriedades.total_propriedades).toLocaleString('pt-BR'),
+                    subtitulo: `${dados.propriedades.total_rural} rurais | ${dados.propriedades.total_urbana} urbanas`,
+                    icon: 'fa-home',
+                    cor: 'info'
+                },
+                {
+                    titulo: 'Área Total Gerenciada',
+                    valor: Number(dados.propriedades.area_total_hectares).toLocaleString('pt-BR', { maximumFractionDigits: 0 }) + ' ha',
+                    subtitulo: `${Number(dados.propriedades.area_total_m2/1000000).toFixed(2)} km²`,
+                    icon: 'fa-map',
+                    cor: 'success'
+                },
+                {
+                    titulo: 'Parcelas SIGEF',
+                    valor: Number(dados.sigef.total_parcelas_sigef).toLocaleString('pt-BR'),
+                    subtitulo: `${dados.sigef.estados_importados} estados importados`,
+                    icon: 'fa-database',
+                    cor: 'info'
+                },
+                {
+                    titulo: 'Marcos Geodésicos',
+                    valor: Number(dados.marcos.total_marcos).toLocaleString('pt-BR'),
+                    subtitulo: `${dados.marcos.marcos_levantados} levantados`,
+                    icon: 'fa-map-marker-alt',
+                    cor: 'success'
+                },
+                {
+                    titulo: 'Sobreposições Detectadas',
+                    valor: Number(dados.sobreposicoes.total_sobreposicoes || 0).toLocaleString('pt-BR'),
+                    subtitulo: `${dados.sobreposicoes.propriedades_com_sobreposicao || 0} propriedades afetadas`,
+                    icon: 'fa-exclamation-triangle',
+                    cor: dados.sobreposicoes.total_sobreposicoes > 0 ? 'warning' : 'success'
+                },
+                {
+                    titulo: 'Confrontantes Identificados',
+                    valor: Number(dados.confrontantes.total_confrontantes || 0).toLocaleString('pt-BR'),
+                    subtitulo: `${dados.confrontantes.limites_comuns || 0} limites comuns`,
+                    icon: 'fa-users',
+                    cor: 'info'
+                },
+                {
+                    titulo: 'Total de Clientes',
+                    valor: Number(dados.propriedades.total_clientes).toLocaleString('pt-BR'),
+                    subtitulo: `${dados.propriedades.total_municipios} municípios`,
+                    icon: 'fa-user-tie',
+                    cor: 'success'
+                },
+                {
+                    titulo: 'Risco Alto/Crítico',
+                    valor: Number(dados.riscos.risco_alto || 0).toLocaleString('pt-BR'),
+                    subtitulo: `${((dados.riscos.risco_alto / dados.riscos.total_analisadas) * 100 || 0).toFixed(1)}% do total`,
+                    icon: 'fa-shield-alt',
+                    cor: dados.riscos.risco_alto > 0 ? 'danger' : 'success'
+                }
+            ];
+
+            const grid = document.getElementById('kpiGrid');
+            grid.innerHTML = kpis.map(kpi => `
+                <div class="kpi-card ${kpi.cor}">
+                    <div class="kpi-header">
+                        <span class="kpi-title">${kpi.titulo}</span>
+                        <i class="fas ${kpi.icon} kpi-icon"></i>
+                    </div>
+                    <div class="kpi-value">${kpi.valor}</div>
+                    <div class="kpi-subtitle">${kpi.subtitulo}</div>
+                </div>
+            `).join('');
+        }
+
+        function renderizarGraficos(dados) {
+            // Gráfico de Tipos
+            const ctxTipos = document.getElementById('chartTipos').getContext('2d');
+            new Chart(ctxTipos, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Rural', 'Urbana'],
+                    datasets: [{
+                        data: [
+                            dados.propriedades.total_rural,
+                            dados.propriedades.total_urbana
+                        ],
+                        backgroundColor: ['#28a745', '#007bff'],
+                        borderWidth: 2,
+                        borderColor: '#fff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+
+            // Gráfico de Estados
+            const ctxEstados = document.getElementById('chartEstados').getContext('2d');
+            new Chart(ctxEstados, {
+                type: 'bar',
+                data: {
+                    labels: dados.distribuicao.por_estado.map(e => e.estado),
+                    datasets: [{
+                        label: 'Propriedades',
+                        data: dados.distribuicao.por_estado.map(e => e.quantidade),
+                        backgroundColor: '#007bff',
+                        borderRadius: 8
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                precision: 0
+                            }
+                        }
+                    }
+                }
+            });
+
+            // Gráfico de Riscos
+            const ctxRiscos = document.getElementById('chartRiscos').getContext('2d');
+            new Chart(ctxRiscos, {
+                type: 'pie',
+                data: {
+                    labels: ['Risco Baixo', 'Risco Médio', 'Risco Alto'],
+                    datasets: [{
+                        data: [
+                            dados.riscos.risco_baixo || 0,
+                            dados.riscos.risco_medio || 0,
+                            dados.riscos.risco_alto || 0
+                        ],
+                        backgroundColor: ['#28a745', '#ffc107', '#dc3545'],
+                        borderWidth: 2,
+                        borderColor: '#fff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+
+            // Gráfico de Timeline
+            const ctxTimeline = document.getElementById('chartTimeline').getContext('2d');
+            new Chart(ctxTimeline, {
+                type: 'line',
+                data: {
+                    labels: dados.timeline.map(t => new Date(t.data).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })).reverse(),
+                    datasets: [{
+                        label: 'Atividades',
+                        data: dados.timeline.map(t => t.atividades).reverse(),
+                        borderColor: '#007bff',
+                        backgroundColor: 'rgba(0, 123, 255, 0.1)',
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                precision: 0
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function renderizarTabelaMunicipios(municipios) {
+            const table = document.getElementById('tableMunicipios');
+            table.innerHTML = `
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Município</th>
+                        <th>Estado</th>
+                        <th>Quantidade</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${municipios.map((m, idx) => `
+                        <tr>
+                            <td>${idx + 1}</td>
+                            <td>${m.municipio}</td>
+                            <td><span class="badge badge-info">${m.estado}</span></td>
+                            <td><strong>${m.quantidade}</strong></td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            `;
+        }
+
+        async function carregarTopPropriedades() {
+            try {
+                const response = await fetch('/api/dashboard/top-propriedades?limite=10');
+                const data = await response.json();
+
+                if (data.sucesso) {
+                    const table = document.getElementById('tablePropriedades');
+                    table.innerHTML = `
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Propriedade</th>
+                                <th>Cliente</th>
+                                <th>Município/UF</th>
+                                <th>Tipo</th>
+                                <th>Área (ha)</th>
+                                <th>Score</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${data.propriedades.map((p, idx) => `
+                                <tr>
+                                    <td>${idx + 1}</td>
+                                    <td><strong>${p.nome_propriedade}</strong></td>
+                                    <td>${p.cliente_nome || 'N/A'}</td>
+                                    <td>${p.municipio}/${p.uf}</td>
+                                    <td><span class="badge badge-${p.tipo === 'RURAL' ? 'success' : 'info'}">${p.tipo}</span></td>
+                                    <td>${Number(p.area_hectares).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}</td>
+                                    <td>${p.score ? getScoreBadge(p.score) : 'N/A'}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    `;
+                }
+            } catch (error) {
+                console.error('Erro ao carregar top propriedades:', error);
+            }
+        }
+
+        function getScoreBadge(score) {
+            if (score >= 80) return `<span class="badge badge-success">${score}</span>`;
+            if (score >= 50) return `<span class="badge badge-warning">${score}</span>`;
+            return `<span class="badge badge-danger">${score}</span>`;
+        }
+
+        // Inicializar
+        carregarDados();
+
+        // Auto-refresh a cada 5 minutos
+        setInterval(carregarDados, 300000);
+    </script>
+</body>
+</html>

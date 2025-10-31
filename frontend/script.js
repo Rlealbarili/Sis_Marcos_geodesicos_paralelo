@@ -4399,3 +4399,161 @@ console.log('✅ Sistema de importação de planilhas adicionado!');
 
     console.log('==========================================\n');
 })();
+
+// ====================================
+// VISUALIZAÇÃO DE PROPRIEDADES (POLÍGONOS)
+// ====================================
+
+let propriedadesLayer = null;
+
+async function carregarPropriedades() {
+    try {
+        console.log('📦 Carregando propriedades do banco...');
+
+        const response = await fetch('http://localhost:3001/api/propriedades/geojson');
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        const geojson = await response.json();
+
+        console.log(`✅ ${geojson.features.length} propriedades carregadas`);
+
+        // Remover camada anterior se existir
+        if (propriedadesLayer) {
+            map.removeLayer(propriedadesLayer);
+        }
+
+        // Criar camada de propriedades
+        propriedadesLayer = L.geoJSON(geojson, {
+            style: function(feature) {
+                const tipo = feature.properties.tipo;
+                return {
+                    color: getTipoColor(tipo),
+                    weight: 3,
+                    opacity: 0.8,
+                    fillColor: getTipoColor(tipo),
+                    fillOpacity: 0.2
+                };
+            },
+            onEachFeature: function(feature, layer) {
+                const props = feature.properties;
+
+                const popupContent = `
+                    <div class="propriedade-popup">
+                        <h3>${props.nome || 'Sem nome'}</h3>
+                        <p><strong>Matrícula:</strong> ${props.matricula || 'N/A'}</p>
+                        <p><strong>Cliente:</strong> ${props.cliente || 'N/A'}</p>
+                        <p><strong>Município:</strong> ${props.municipio || 'N/A'} - ${props.uf || ''}</p>
+                        <p><strong>Tipo:</strong> <span style="background: ${getTipoColor(props.tipo)}; padding: 2px 8px; border-radius: 3px; color: white; font-size: 11px;">${props.tipo}</span></p>
+                        <hr>
+                        <p><strong>Área Informada:</strong> ${formatarArea(props.area_m2)}</p>
+                        <p><strong>Área Calculada:</strong> ${formatarArea(props.area_calculada)}</p>
+                        ${calcularDiferencaArea(props.area_m2, props.area_calculada)}
+                        <p><strong>Perímetro:</strong> ${formatarDistancia(props.perimetro_calculado)}</p>
+                    </div>
+                `;
+
+                layer.bindPopup(popupContent, { maxWidth: 350 });
+
+                // Highlight ao passar mouse
+                layer.on('mouseover', function() {
+                    this.setStyle({ weight: 5, fillOpacity: 0.4 });
+                });
+
+                layer.on('mouseout', function() {
+                    propriedadesLayer.resetStyle(this);
+                });
+
+                // Log ao clicar
+                layer.on('click', function() {
+                    console.log('📍 Propriedade clicada:', props);
+                });
+            }
+        }).addTo(map);
+
+        // Ajustar zoom para mostrar todas as propriedades
+        if (geojson.features.length > 0) {
+            map.fitBounds(propriedadesLayer.getBounds(), { padding: [50, 50] });
+        }
+
+        console.log('✅ Propriedades adicionadas ao mapa');
+
+    } catch (error) {
+        console.error('❌ Erro ao carregar propriedades:', error);
+    }
+}
+
+function getTipoColor(tipo) {
+    const cores = {
+        'RURAL': '#28a745',
+        'URBANA': '#007bff',
+        'INDUSTRIAL': '#ffc107',
+        'COMERCIAL': '#17a2b8'
+    };
+    return cores[tipo] || '#6c757d';
+}
+
+function formatarArea(area) {
+    if (!area || area === 0) return 'N/A';
+    const hectares = area / 10000;
+    return hectares >= 1
+        ? `${hectares.toFixed(2)} ha (${area.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} m²)`
+        : `${area.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} m²`;
+}
+
+function formatarDistancia(dist) {
+    if (!dist || dist === 0) return 'N/A';
+    return dist >= 1000
+        ? `${(dist / 1000).toFixed(2)} km`
+        : `${dist.toFixed(2)} m`;
+}
+
+function calcularDiferencaArea(areaInformada, areaCalculada) {
+    if (!areaInformada || !areaCalculada || areaInformada === 0) {
+        return '';
+    }
+
+    const diff = Math.abs(areaInformada - areaCalculada);
+    const diffPercent = (diff / areaInformada) * 100;
+
+    const cor = diffPercent > 5 ? 'red' : 'green';
+
+    return `<p><strong>Diferença:</strong> <span style="color: ${cor};">${diffPercent.toFixed(2)}% (${diff.toFixed(2)} m²)</span></p>`;
+}
+
+// Toggle para mostrar/ocultar propriedades
+let propriedadesVisiveis = true;
+function togglePropriedades() {
+    if (propriedadesLayer) {
+        if (propriedadesVisiveis) {
+            map.removeLayer(propriedadesLayer);
+            console.log('👁️ Propriedades ocultadas');
+        } else {
+            map.addLayer(propriedadesLayer);
+            console.log('👁️ Propriedades exibidas');
+        }
+        propriedadesVisiveis = !propriedadesVisiveis;
+    }
+}
+
+// Função para recarregar propriedades
+function recarregarPropriedades() {
+    console.log('🔄 Recarregando propriedades...');
+    carregarPropriedades();
+}
+
+// CARREGAR PROPRIEDADES AO INICIAR (após 3 segundos do mapa estar pronto)
+if (typeof map !== 'undefined') {
+    console.log('🗺️ Aguardando mapa ficar pronto para carregar propriedades...');
+    setTimeout(() => {
+        carregarPropriedades();
+    }, 3000);
+} else {
+    console.warn('⚠️ Mapa não está definido. Propriedades não serão carregadas automaticamente.');
+}
+
+console.log('✅ Sistema de visualização de propriedades carregado');
+console.log('💡 Use togglePropriedades() para mostrar/ocultar');
+console.log('💡 Use recarregarPropriedades() para atualizar');

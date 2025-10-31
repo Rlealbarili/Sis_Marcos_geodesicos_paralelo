@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Relatórios - Sistema de Marcos Geodésicos</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        .relatorios-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .relatorios-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+
+        .relatorios-header h1 {
+            margin: 0 0 10px 0;
+            font-size: 2em;
+        }
+
+        .relatorios-header p {
+            margin: 0;
+            opacity: 0.9;
+        }
+
+        .relatorio-section {
+            background: white;
+            border-radius: 10px;
+            padding: 25px;
+            margin-bottom: 25px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            border-left: 4px solid #667eea;
+        }
+
+        .relatorio-section h2 {
+            color: #333;
+            margin-top: 0;
+            margin-bottom: 20px;
+            font-size: 1.5em;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .filtros-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .filtro-grupo {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .filtro-grupo label {
+            font-weight: 600;
+            margin-bottom: 5px;
+            color: #555;
+            font-size: 0.9em;
+        }
+
+        .filtro-grupo input,
+        .filtro-grupo select {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 1em;
+            transition: border-color 0.3s;
+        }
+
+        .filtro-grupo input:focus,
+        .filtro-grupo select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .botoes-download {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .btn-download {
+            flex: 1;
+            min-width: 120px;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 5px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn-pdf {
+            background: linear-gradient(135deg, #ff6b6b, #ee5a6f);
+            color: white;
+        }
+
+        .btn-excel {
+            background: linear-gradient(135deg, #51cf66, #37b24d);
+            color: white;
+        }
+
+        .btn-csv {
+            background: linear-gradient(135deg, #4dabf7, #339af0);
+            color: white;
+        }
+
+        .btn-download:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+
+        .btn-download:active {
+            transform: translateY(0);
+        }
+
+        .btn-download:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .icon {
+            width: 20px;
+            height: 20px;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 3px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .mensagem {
+            padding: 12px 20px;
+            border-radius: 5px;
+            margin-top: 15px;
+            display: none;
+        }
+
+        .mensagem.sucesso {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .mensagem.erro {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .mensagem.show {
+            display: block;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .voltar-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 20px;
+            background: white;
+            color: #667eea;
+            border: 2px solid #667eea;
+            border-radius: 5px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+
+        .voltar-btn:hover {
+            background: #667eea;
+            color: white;
+            transform: translateY(-2px);
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .stat-card .numero {
+            font-size: 2em;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .stat-card .label {
+            font-size: 0.9em;
+            opacity: 0.9;
+        }
+    </style>
+</head>
+<body>
+    <div class="relatorios-container">
+        <div class="relatorios-header">
+            <h1>📊 Relatórios</h1>
+            <p>Gere relatórios detalhados de propriedades e marcos geodésicos em múltiplos formatos</p>
+        </div>
+
+        <div style="margin-bottom: 20px;">
+            <a href="index.html" class="voltar-btn">
+                ← Voltar ao Sistema
+            </a>
+        </div>
+
+        <!-- Relatório de Propriedades -->
+        <div class="relatorio-section">
+            <h2>
+                🏘️ Relatório de Propriedades
+            </h2>
+
+            <div class="filtros-container">
+                <div class="filtro-grupo">
+                    <label for="prop-cliente">Cliente</label>
+                    <select id="prop-cliente">
+                        <option value="">Todos os clientes</option>
+                    </select>
+                </div>
+
+                <div class="filtro-grupo">
+                    <label for="prop-municipio">Município</label>
+                    <input type="text" id="prop-municipio" placeholder="Ex: Curitiba">
+                </div>
+
+                <div class="filtro-grupo">
+                    <label for="prop-tipo">Tipo</label>
+                    <select id="prop-tipo">
+                        <option value="">Todos os tipos</option>
+                        <option value="RURAL">Rural</option>
+                        <option value="URBANO">Urbano</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="botoes-download">
+                <button class="btn-download btn-pdf" onclick="baixarRelatorioPropriedades('pdf')">
+                    📄 PDF
+                </button>
+                <button class="btn-download btn-excel" onclick="baixarRelatorioPropriedades('excel')">
+                    📊 Excel
+                </button>
+                <button class="btn-download btn-csv" onclick="baixarRelatorioPropriedades('csv')">
+                    📋 CSV
+                </button>
+            </div>
+
+            <div id="mensagem-propriedades" class="mensagem"></div>
+        </div>
+
+        <!-- Relatório de Marcos Geodésicos -->
+        <div class="relatorio-section">
+            <h2>
+                📍 Relatório de Marcos Geodésicos
+            </h2>
+
+            <div class="filtros-container">
+                <div class="filtro-grupo">
+                    <label for="marco-municipio">Município</label>
+                    <input type="text" id="marco-municipio" placeholder="Ex: Curitiba">
+                </div>
+
+                <div class="filtro-grupo">
+                    <label for="marco-tipo">Tipo</label>
+                    <select id="marco-tipo">
+                        <option value="">Todos os tipos</option>
+                        <option value="V">Vértice (V)</option>
+                        <option value="M">Marco (M)</option>
+                        <option value="P">Ponto (P)</option>
+                    </select>
+                </div>
+
+                <div class="filtro-grupo">
+                    <label for="marco-status">Status</label>
+                    <select id="marco-status">
+                        <option value="">Todos</option>
+                        <option value="ATIVO">Ativo</option>
+                        <option value="INATIVO">Inativo</option>
+                        <option value="DESTRUIDO">Destruído</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="botoes-download">
+                <button class="btn-download btn-pdf" onclick="baixarRelatorioMarcos('pdf')">
+                    📄 PDF
+                </button>
+                <button class="btn-download btn-excel" onclick="baixarRelatorioMarcos('excel')">
+                    📊 Excel
+                </button>
+                <button class="btn-download btn-csv" onclick="baixarRelatorioMarcos('csv')">
+                    📋 CSV
+                </button>
+            </div>
+
+            <div id="mensagem-marcos" class="mensagem"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:3001/api';
+
+        // Carregar clientes para o filtro
+        async function carregarClientes() {
+            try {
+                const response = await fetch(`${API_URL}/clientes`);
+                if (!response.ok) throw new Error('Erro ao carregar clientes');
+
+                const data = await response.json();
+                const clientes = Array.isArray(data) ? data : (data.clientes || []);
+                const select = document.getElementById('prop-cliente');
+
+                clientes.forEach(cliente => {
+                    const option = document.createElement('option');
+                    option.value = cliente.id;
+                    option.textContent = cliente.nome;
+                    select.appendChild(option);
+                });
+            } catch (error) {
+                console.error('Erro ao carregar clientes:', error);
+            }
+        }
+
+        // Baixar relatório de propriedades
+        async function baixarRelatorioPropriedades(formato) {
+            const btnSelector = `.relatorio-section:first-of-type .btn-${formato}`;
+            const btn = document.querySelector(btnSelector);
+            const mensagemEl = document.getElementById('mensagem-propriedades');
+
+            // Coletar filtros
+            const clienteId = document.getElementById('prop-cliente').value;
+            const municipio = document.getElementById('prop-municipio').value.trim();
+            const tipo = document.getElementById('prop-tipo').value;
+
+            // Construir query string
+            const params = new URLSearchParams();
+            if (clienteId) params.append('cliente_id', clienteId);
+            if (municipio) params.append('municipio', municipio);
+            if (tipo) params.append('tipo', tipo);
+
+            try {
+                // Desabilitar botão
+                btn.disabled = true;
+                btn.innerHTML = '<span class="loading"></span> Gerando...';
+
+                // Fazer requisição
+                const url = `${API_URL}/relatorios/propriedades/${formato}?${params.toString()}`;
+                const response = await fetch(url);
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.error || 'Erro ao gerar relatório');
+                }
+
+                // Baixar arquivo
+                const blob = await response.blob();
+                const downloadUrl = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = downloadUrl;
+                a.download = `propriedades_${Date.now()}.${formato === 'excel' ? 'xlsx' : formato}`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(downloadUrl);
+
+                // Mostrar mensagem de sucesso
+                mostrarMensagem(mensagemEl, 'Relatório gerado com sucesso!', 'sucesso');
+
+            } catch (error) {
+                console.error('Erro ao baixar relatório:', error);
+                mostrarMensagem(mensagemEl, 'Erro ao gerar relatório: ' + error.message, 'erro');
+            } finally {
+                // Restaurar botão
+                btn.disabled = false;
+                const icons = { pdf: '📄', excel: '📊', csv: '📋' };
+                const labels = { pdf: 'PDF', excel: 'Excel', csv: 'CSV' };
+                btn.innerHTML = `${icons[formato]} ${labels[formato]}`;
+            }
+        }
+
+        // Baixar relatório de marcos
+        async function baixarRelatorioMarcos(formato) {
+            const btnSelector = `.relatorio-section:last-of-type .btn-${formato}`;
+            const btn = document.querySelector(btnSelector);
+            const mensagemEl = document.getElementById('mensagem-marcos');
+
+            // Coletar filtros
+            const municipio = document.getElementById('marco-municipio').value.trim();
+            const tipo = document.getElementById('marco-tipo').value;
+            const status = document.getElementById('marco-status').value;
+
+            // Construir query string
+            const params = new URLSearchParams();
+            if (municipio) params.append('municipio', municipio);
+            if (tipo) params.append('tipo', tipo);
+            if (status) params.append('status', status);
+
+            try {
+                // Desabilitar botão
+                btn.disabled = true;
+                btn.innerHTML = '<span class="loading"></span> Gerando...';
+
+                // Fazer requisição
+                const url = `${API_URL}/relatorios/marcos/${formato}?${params.toString()}`;
+                const response = await fetch(url);
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.error || 'Erro ao gerar relatório');
+                }
+
+                // Baixar arquivo
+                const blob = await response.blob();
+                const downloadUrl = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = downloadUrl;
+                a.download = `marcos_geodesicos_${Date.now()}.${formato === 'excel' ? 'xlsx' : formato}`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(downloadUrl);
+
+                // Mostrar mensagem de sucesso
+                mostrarMensagem(mensagemEl, 'Relatório gerado com sucesso!', 'sucesso');
+
+            } catch (error) {
+                console.error('Erro ao baixar relatório:', error);
+                mostrarMensagem(mensagemEl, 'Erro ao gerar relatório: ' + error.message, 'erro');
+            } finally {
+                // Restaurar botão
+                btn.disabled = false;
+                const icons = { pdf: '📄', excel: '📊', csv: '📋' };
+                const labels = { pdf: 'PDF', excel: 'Excel', csv: 'CSV' };
+                btn.innerHTML = `${icons[formato]} ${labels[formato]}`;
+            }
+        }
+
+        // Mostrar mensagem
+        function mostrarMensagem(elemento, texto, tipo) {
+            elemento.textContent = texto;
+            elemento.className = `mensagem ${tipo} show`;
+
+            setTimeout(() => {
+                elemento.classList.remove('show');
+            }, 5000);
+        }
+
+        // Inicializar
+        document.addEventListener('DOMContentLoaded', () => {
+            carregarClientes();
+            console.log('✅ Interface de relatórios carregada');
+        });
+    </script>
+</body>
+</html>

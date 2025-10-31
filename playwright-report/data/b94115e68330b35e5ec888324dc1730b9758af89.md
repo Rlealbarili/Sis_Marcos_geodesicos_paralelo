@@ -1,0 +1,123 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e2]:
+  - complementary [ref=e3]:
+    - link "COGEP" [ref=e5] [cursor=pointer]:
+      - /url: "#"
+      - img [ref=e6]
+      - generic [ref=e9]: COGEP
+    - navigation [ref=e10]:
+      - link "Mapa" [ref=e11] [cursor=pointer]:
+        - /url: "#"
+        - img [ref=e12]
+        - generic [ref=e14]: Mapa
+      - link "Marcos" [ref=e15] [cursor=pointer]:
+        - /url: "#"
+        - img [ref=e16]
+        - generic [ref=e19]: Marcos
+      - link "Importar" [ref=e20] [cursor=pointer]:
+        - /url: "#"
+        - img [ref=e21]
+        - generic [ref=e24]: Importar
+      - link "Propriedades" [ref=e25] [cursor=pointer]:
+        - /url: "#"
+        - img [ref=e26]
+        - generic [ref=e30]: Propriedades
+      - link "Clientes" [ref=e31] [cursor=pointer]:
+        - /url: "#"
+        - img [ref=e32]
+        - generic [ref=e37]: Clientes
+      - link "Histórico" [ref=e38] [cursor=pointer]:
+        - /url: "#"
+        - img [ref=e39]
+        - generic [ref=e42]: Histórico
+    - button [ref=e44] [cursor=pointer]:
+      - img [ref=e45]
+  - main [ref=e47]:
+    - generic [ref=e48]:
+      - heading "Sistema de Marcos Geodésicos" [level=1] [ref=e50]
+      - generic [ref=e51]:
+        - generic [ref=e52]:
+          - img
+          - textbox "Buscar..." [ref=e53]
+        - button "Novo Marco" [ref=e54] [cursor=pointer]:
+          - img [ref=e55]
+          - text: Novo Marco
+    - generic [ref=e56]:
+      - generic [ref=e57]:
+        - generic [ref=e58]: Total de Marcos
+        - generic [ref=e59]:
+          - img [ref=e61]
+          - generic [ref=e64]: "0"
+      - generic [ref=e65]:
+        - generic [ref=e66]: Marcos Levantados
+        - generic [ref=e67]:
+          - img [ref=e69]
+          - generic [ref=e72]: "0"
+      - generic [ref=e73]:
+        - generic [ref=e74]: Propriedades
+        - generic [ref=e75]: "5"
+      - generic [ref=e76]:
+        - generic [ref=e77]: Clientes
+        - generic [ref=e78]:
+          - img [ref=e80]
+          - generic [ref=e85]: "0"
+    - generic [ref=e87]:
+      - button "Mapa" [ref=e88] [cursor=pointer]:
+        - img [ref=e89]
+        - text: Mapa
+      - button "Buscar Marcos" [ref=e91] [cursor=pointer]:
+        - img [ref=e92]
+        - text: Buscar Marcos
+      - button "Importar Memorial" [ref=e95] [cursor=pointer]:
+        - img [ref=e96]
+        - text: Importar Memorial
+      - button "Propriedades" [ref=e99] [cursor=pointer]:
+        - img [ref=e100]
+        - text: Propriedades
+      - button "Clientes" [ref=e104] [cursor=pointer]:
+        - img [ref=e105]
+        - text: Clientes
+      - button "Histórico" [ref=e110] [cursor=pointer]:
+        - img [ref=e111]
+        - text: Histórico
+    - generic [ref=e116]:
+      - generic:
+        - generic:
+          - button "101" [ref=e117] [cursor=pointer]:
+            - generic [ref=e118]: "101"
+          - button "117" [ref=e119] [cursor=pointer]:
+            - generic [ref=e120]: "117"
+      - generic:
+        - generic [ref=e121]:
+          - button "Zoom in" [ref=e122] [cursor=pointer]: +
+          - button "Zoom out" [ref=e123] [cursor=pointer]: −
+        - generic [ref=e125]:
+          - generic [ref=e126]:
+            - generic [ref=e128]:
+              - radio "🗺️ Mapa Padrão" [ref=e129]
+              - text: 🗺️ Mapa Padrão
+            - generic [ref=e131]:
+              - radio "🛰️ Satélite" [ref=e132]
+              - text: 🛰️ Satélite
+          - generic [ref=e134]:
+            - generic [ref=e136]:
+              - checkbox "📍 Marcos Geodésicos" [checked] [ref=e137]
+              - text: 📍 Marcos Geodésicos
+            - generic [ref=e139]:
+              - checkbox "🌳 Propriedades Rurais" [ref=e140]
+              - text: 🌳 Propriedades Rurais
+            - generic [ref=e142]:
+              - checkbox "🏢 Propriedades Urbanas" [ref=e143]
+              - text: 🏢 Propriedades Urbanas
+            - generic [ref=e145]:
+              - checkbox "🏘️ Loteamentos" [ref=e146]
+              - text: 🏘️ Loteamentos
+        - generic [ref=e147]:
+          - link "Leaflet" [ref=e148] [cursor=pointer]:
+            - /url: https://leafletjs.com
+            - img [ref=e149]
+            - text: Leaflet
+          - text: "| © OpenStreetMap"
+```

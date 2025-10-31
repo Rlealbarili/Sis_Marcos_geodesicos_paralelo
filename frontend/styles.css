@@ -1731,3 +1731,76 @@ tbody td {
 .marco-popup button:hover {
     background-color: #2980b9;
 }
+
+/* ========================================
+   POPUPS DE PROPRIEDADES
+   ======================================== */
+
+.propriedade-popup {
+    min-width: 250px;
+    font-family: var(--font-sans);
+}
+
+.propriedade-popup h3 {
+    margin: 0 0 10px 0;
+    color: #2c3e50;
+    font-size: 16px;
+    font-weight: 700;
+    border-bottom: 2px solid #3498db;
+    padding-bottom: 8px;
+}
+
+.propriedade-popup p {
+    margin: 6px 0;
+    font-size: 13px;
+    color: #555;
+    line-height: 1.5;
+}
+
+.propriedade-popup strong {
+    color: #2c3e50;
+    font-weight: 600;
+}
+
+.propriedade-popup hr {
+    margin: 12px 0;
+    border: none;
+    border-top: 1px solid #ecf0f1;
+}
+
+.propriedade-popup span {
+    font-weight: 500;
+}
+
+/* Cores para tipos de propriedades */
+.propriedade-popup .tipo-badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: white;
+}
+
+.propriedade-popup .tipo-rural {
+    background-color: #28a745;
+}
+
+.propriedade-popup .tipo-urbana {
+    background-color: #007bff;
+}
+
+.propriedade-popup .tipo-industrial {
+    background-color: #ffc107;
+    color: #333;
+}
+
+.propriedade-popup .tipo-comercial {
+    background-color: #17a2b8;
+}
+
+/* Animação de hover no mapa */
+.leaflet-interactive:hover {
+    cursor: pointer;
+}

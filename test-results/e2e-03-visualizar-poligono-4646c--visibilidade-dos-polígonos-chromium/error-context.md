@@ -1,0 +1,234 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e2]:
+  - complementary [ref=e3]:
+    - link "COGEP" [ref=e5] [cursor=pointer]:
+      - /url: "#"
+      - img [ref=e6]
+      - generic [ref=e9]: COGEP
+    - navigation [ref=e10]:
+      - link "Mapa" [ref=e11] [cursor=pointer]:
+        - /url: "#"
+        - img [ref=e12]
+        - generic [ref=e14]: Mapa
+      - link "Marcos" [ref=e15] [cursor=pointer]:
+        - /url: "#"
+        - img [ref=e16]
+        - generic [ref=e19]: Marcos
+      - link "Importar" [ref=e20] [cursor=pointer]:
+        - /url: "#"
+        - img [ref=e21]
+        - generic [ref=e24]: Importar
+      - link "Propriedades" [ref=e25] [cursor=pointer]:
+        - /url: "#"
+        - img [ref=e26]
+        - generic [ref=e30]: Propriedades
+      - link "Clientes" [ref=e31] [cursor=pointer]:
+        - /url: "#"
+        - img [ref=e32]
+        - generic [ref=e37]: Clientes
+      - link "Histórico" [ref=e38] [cursor=pointer]:
+        - /url: "#"
+        - img [ref=e39]
+        - generic [ref=e42]: Histórico
+    - button [ref=e44] [cursor=pointer]:
+      - img [ref=e45]
+  - main [ref=e47]:
+    - generic [ref=e48]:
+      - heading "Sistema de Marcos Geodésicos" [level=1] [ref=e50]
+      - generic [ref=e51]:
+        - generic [ref=e52]:
+          - img
+          - textbox "Buscar..." [ref=e53]
+        - button "Novo Marco" [ref=e54] [cursor=pointer]:
+          - img [ref=e55]
+          - text: Novo Marco
+    - generic [ref=e56]:
+      - generic [ref=e57]:
+        - generic [ref=e58]: Total de Marcos
+        - generic [ref=e59]:
+          - img [ref=e61]
+          - generic [ref=e64]: "0"
+      - generic [ref=e65]:
+        - generic [ref=e66]: Marcos Levantados
+        - generic [ref=e67]:
+          - img [ref=e69]
+          - generic [ref=e72]: "0"
+      - generic [ref=e73]:
+        - generic [ref=e74]: Propriedades
+        - generic [ref=e75]: "5"
+      - generic [ref=e76]:
+        - generic [ref=e77]: Clientes
+        - generic [ref=e78]:
+          - img [ref=e80]
+          - generic [ref=e85]: "0"
+    - generic [ref=e87]:
+      - button "Mapa" [ref=e88] [cursor=pointer]:
+        - img [ref=e89]
+        - text: Mapa
+      - button "Buscar Marcos" [ref=e91] [cursor=pointer]:
+        - img [ref=e92]
+        - text: Buscar Marcos
+      - button "Importar Memorial" [ref=e95] [cursor=pointer]:
+        - img [ref=e96]
+        - text: Importar Memorial
+      - button "Propriedades" [active] [ref=e99] [cursor=pointer]:
+        - img [ref=e100]
+        - text: Propriedades
+      - button "Clientes" [ref=e104] [cursor=pointer]:
+        - img [ref=e105]
+        - text: Clientes
+      - button "Histórico" [ref=e110] [cursor=pointer]:
+        - img [ref=e111]
+        - text: Histórico
+    - generic [ref=e116]:
+      - generic [ref=e117]:
+        - generic [ref=e118]:
+          - generic [ref=e119]:
+            - heading "Propriedades" [level=2] [ref=e120]
+            - paragraph [ref=e121]: Gerencie propriedades rurais e urbanas cadastradas no sistema
+          - button "Nova Propriedade" [ref=e122] [cursor=pointer]:
+            - img [ref=e123]
+            - text: Nova Propriedade
+        - generic [ref=e124]:
+          - generic [ref=e125]:
+            - img
+            - textbox "Buscar por nome, matrícula ou município..." [ref=e126]
+          - combobox [ref=e128] [cursor=pointer]:
+            - option "Todos os tipos" [selected]
+            - option "Rural"
+            - option "Urbana"
+          - combobox [ref=e130] [cursor=pointer]:
+            - option "Todos municípios" [selected]
+            - option "Campo Largo"
+            - option "Curitiba"
+          - button "Limpar filtros" [ref=e131] [cursor=pointer]:
+            - img [ref=e132]
+      - generic [ref=e135]:
+        - generic [ref=e136] [cursor=pointer]:
+          - generic [ref=e138]:
+            - generic [ref=e139]:
+              - img [ref=e140]
+              - generic [ref=e146]: Rural
+            - heading "Fazenda Santa Rita" [level=3] [ref=e147]
+            - paragraph [ref=e148]: "Matrícula: MAT-12345"
+          - generic [ref=e149]:
+            - generic [ref=e150]:
+              - img [ref=e151]
+              - generic [ref=e154]: Campo Largo - PR
+            - generic [ref=e155]:
+              - img [ref=e156]
+              - generic [ref=e161]: "Área: 50.000 m²"
+            - generic [ref=e162]:
+              - img [ref=e163]
+              - generic [ref=e166]: João da Silva
+          - generic [ref=e168]:
+            - generic [ref=e169]: Marcos Geodésicos
+            - strong [ref=e170]: "0"
+          - generic [ref=e171]:
+            - button "Editar" [ref=e172]:
+              - img [ref=e173]
+              - text: Editar
+            - button [ref=e176]:
+              - img [ref=e177]
+        - generic [ref=e180] [cursor=pointer]:
+          - generic [ref=e182]:
+            - generic [ref=e183]:
+              - img [ref=e184]
+              - generic [ref=e190]: Rural
+            - heading "Lote Comercial Centro" [level=3] [ref=e191]
+            - paragraph [ref=e192]: "Matrícula: MAT-67890"
+          - generic [ref=e193]:
+            - generic [ref=e194]:
+              - img [ref=e195]
+              - generic [ref=e198]: Curitiba - PR
+            - generic [ref=e199]:
+              - img [ref=e200]
+              - generic [ref=e205]: "Área: 1.500 m²"
+            - generic [ref=e206]:
+              - img [ref=e207]
+              - generic [ref=e210]: Empresa XYZ Ltda
+          - generic [ref=e212]:
+            - generic [ref=e213]: Marcos Geodésicos
+            - strong [ref=e214]: "0"
+          - generic [ref=e215]:
+            - button "Editar" [ref=e216]:
+              - img [ref=e217]
+              - text: Editar
+            - button [ref=e220]:
+              - img [ref=e221]
+        - generic [ref=e224] [cursor=pointer]:
+          - generic [ref=e226]:
+            - generic [ref=e227]:
+              - img [ref=e228]
+              - generic [ref=e234]: Rural
+            - heading "Propriedade Teste 1761761437708" [level=3] [ref=e235]
+            - paragraph [ref=e236]: "Matrícula: TEST-1761761437708"
+          - generic [ref=e237]:
+            - generic [ref=e238]:
+              - img [ref=e239]
+              - generic [ref=e242]: Curitiba - PR
+            - generic [ref=e243]:
+              - img [ref=e244]
+              - generic [ref=e249]: "Área: 50.000 m²"
+          - generic [ref=e251]:
+            - generic [ref=e252]: Marcos Geodésicos
+            - strong [ref=e253]: "0"
+          - generic [ref=e254]:
+            - button "Editar" [ref=e255]:
+              - img [ref=e256]
+              - text: Editar
+            - button [ref=e259]:
+              - img [ref=e260]
+        - generic [ref=e263] [cursor=pointer]:
+          - generic [ref=e265]:
+            - generic [ref=e266]:
+              - img [ref=e267]
+              - generic [ref=e273]: Rural
+            - heading "Propriedade Teste Playwright" [level=3] [ref=e274]
+          - generic [ref=e275]:
+            - generic [ref=e276]:
+              - img [ref=e277]
+              - generic [ref=e280]: Campo Largo - PR
+            - generic [ref=e281]:
+              - img [ref=e282]
+              - generic [ref=e287]: "Área: 100.000 m²"
+            - generic [ref=e288]:
+              - img [ref=e289]
+              - generic [ref=e292]: Cliente Teste Playwright
+          - generic [ref=e294]:
+            - generic [ref=e295]: Marcos Geodésicos
+            - strong [ref=e296]: "0"
+          - generic [ref=e297]:
+            - button "Editar" [ref=e298]:
+              - img [ref=e299]
+              - text: Editar
+            - button [ref=e302]:
+              - img [ref=e303]
+        - generic [ref=e306] [cursor=pointer]:
+          - generic [ref=e308]:
+            - generic [ref=e309]:
+              - img [ref=e310]
+              - generic [ref=e316]: Rural
+            - heading "Propriedade Teste Playwright" [level=3] [ref=e317]
+          - generic [ref=e318]:
+            - generic [ref=e319]:
+              - img [ref=e320]
+              - generic [ref=e323]: Campo Largo - PR
+            - generic [ref=e324]:
+              - img [ref=e325]
+              - generic [ref=e330]: "Área: 100.000 m²"
+            - generic [ref=e331]:
+              - img [ref=e332]
+              - generic [ref=e335]: Cliente Teste Playwright
+          - generic [ref=e337]:
+            - generic [ref=e338]: Marcos Geodésicos
+            - strong [ref=e339]: "0"
+          - generic [ref=e340]:
+            - button "Editar" [ref=e341]:
+              - img [ref=e342]
+              - text: Editar
+            - button [ref=e345]:
+              - img [ref=e346]
+```

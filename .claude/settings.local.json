@@ -33,7 +33,20 @@
       "mcp__playwright__browser_take_screenshot",
       "mcp__playwright__browser_evaluate",
       "mcp__playwright__browser_press_key",
-      "mcp__playwright__browser_close"
+      "mcp__playwright__browser_close",
+      "Bash(set PGPASSWORD=marcos123)",
+      "Bash(psql:*)",
+      "Bash(cmd /c \"taskkill /F /PID 5548\")",
+      "Bash(timeout:*)",
+      "Bash(cmd /c \"for /f \"\"tokens=5\"\" %a in (''netstat -ano ^| findstr :3001'') do taskkill /F /PID %a\")",
+      "Bash(cmd /c \"for /f \"\"tokens=5\"\" %a in (''''netstat -ano ^| findstr :3001'''') do @echo %a\")",
+      "Bash(start /B node:*)",
+      "Bash(cmd /c \"for /f \"\"tokens=5\"\" %a in (''netstat -ano ^| findstr :3001'') do @echo %a\")",
+      "Bash(cmd /c \"taskkill /F /PID 9724\")",
+      "Bash(\"C:\\Sis_Marcos_geodesicos_paralelo-main\\ENDPOINTS_FUNCIONAIS.md\")",
+      "Bash(cmd /c \"taskkill /F /PID 20192\")",
+      "Bash(cmd /c \"for /f \"tokens=5\" %a in (''netstat -ano ^| findstr :3001'') do @echo %a\")",
+      "Bash(cmd.exe /c \"taskkill /F /PID 9300\")"
     ],
     "deny": [],
     "ask": []

@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gerenciador SIGEF/INCRA</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f5f5;
+            margin: 0;
+            padding: 0;
+        }
+
+        .sigef-container {
+            max-width: 1400px;
+            margin: 20px auto;
+            padding: 20px;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+        }
+
+        .download-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 10px;
+            margin: 20px 0;
+        }
+
+        .estado-card {
+            padding: 15px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            background: white;
+        }
+
+        .estado-card:hover {
+            border-color: #007bff;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+
+        .estado-card h3 {
+            margin: 0 0 10px 0;
+            font-size: 24px;
+            color: #333;
+        }
+
+        .estado-card .status {
+            font-size: 12px;
+            color: #666;
+        }
+
+        .estado-card.downloading {
+            border-color: #ffc107;
+            background: #fff3cd;
+        }
+
+        .estado-card.completed {
+            border-color: #28a745;
+            background: #d4edda;
+        }
+
+        .estado-card.error {
+            border-color: #dc3545;
+            background: #f8d7da;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .stat-card {
+            padding: 20px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .stat-card h3 {
+            margin: 0 0 10px 0;
+            color: #666;
+            font-size: 14px;
+            text-transform: uppercase;
+            font-weight: 600;
+        }
+
+        .stat-card .value {
+            font-size: 36px;
+            font-weight: bold;
+            color: #007bff;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin: 10px 5px;
+        }
+
+        .btn-primary {
+            background: #007bff;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #0056b3;
+            transform: translateY(-1px);
+            box-shadow: 0 3px 6px rgba(0,0,0,0.15);
+        }
+
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #218838;
+        }
+
+        table {
+            width: 100%;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin: 20px 0;
+        }
+
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+
+        th {
+            background: #007bff;
+            color: white;
+            font-weight: 600;
+        }
+
+        tr:hover {
+            background: #f8f9fa;
+        }
+
+        .badge {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .badge-success {
+            background: #28a745;
+            color: white;
+        }
+
+        .badge-warning {
+            background: #ffc107;
+            color: #333;
+        }
+
+        .badge-danger {
+            background: #dc3545;
+            color: white;
+        }
+
+        .section {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin: 20px 0;
+        }
+
+        .section h2 {
+            margin-top: 0;
+            color: #333;
+            border-bottom: 2px solid #007bff;
+            padding-bottom: 10px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+
+        .action-buttons {
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="sigef-container">
+        <h1>🌐 Gerenciador SIGEF/INCRA</h1>
+        <p class="subtitle">Sistema de Download e Importação de Parcelas Certificadas</p>
+
+        <div class="stats-grid" id="statsGrid">
+            <div class="stat-card">
+                <h3>Total de Parcelas</h3>
+                <div class="value" id="totalParcelas">-</div>
+            </div>
+            <div class="stat-card">
+                <h3>Estados Importados</h3>
+                <div class="value" id="totalEstados">-</div>
+            </div>
+            <div class="stat-card">
+                <h3>Área Total (ha)</h3>
+                <div class="value" id="areaTotal">-</div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>📥 Download por Estado</h2>
+            <div class="action-buttons">
+                <button onclick="downloadTodos()" class="btn btn-primary">
+                    📥 Download Todos os Estados (9 estados)
+                </button>
+                <button onclick="location.reload()" class="btn btn-success">
+                    🔄 Atualizar Página
+                </button>
+            </div>
+
+            <div class="download-grid" id="estadosGrid">
+                <div class="loading">Carregando estados...</div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>📊 Histórico de Downloads</h2>
+            <table id="downloadsTable">
+                <thead>
+                    <tr>
+                        <th>Estado</th>
+                        <th>Tipo</th>
+                        <th>Data/Hora</th>
+                        <th>Registros</th>
+                        <th>Tamanho</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td colspan="6" class="loading">Carregando...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        const estados = ['PR', 'SC', 'RS', 'SP', 'MG', 'MS', 'GO', 'MT', 'DF'];
+        const API_BASE = 'http://localhost:3001/api';
+
+        function init() {
+            renderEstados();
+            carregarEstatisticas();
+            carregarDownloads();
+            setInterval(carregarDownloads, 10000); // Atualizar a cada 10s
+            setInterval(carregarEstatisticas, 30000); // Atualizar estatísticas a cada 30s
+        }
+
+        function renderEstados() {
+            const grid = document.getElementById('estadosGrid');
+            grid.innerHTML = estados.map(estado => `
+                <div class="estado-card" id="estado-${estado}" onclick="downloadEstado('${estado}')">
+                    <h3>${estado}</h3>
+                    <div class="status">Clique para baixar</div>
+                </div>
+            `).join('');
+        }
+
+        async function downloadEstado(estado) {
+            const card = document.getElementById(`estado-${estado}`);
+            const statusDiv = card.querySelector('.status');
+
+            if (card.classList.contains('downloading')) {
+                alert('Download já em andamento para este estado!');
+                return;
+            }
+
+            card.classList.add('downloading');
+            statusDiv.textContent = 'Baixando...';
+
+            try {
+                const response = await fetch(`${API_BASE}/sigef/download/${estado}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tipo: 'certificada_particular' })
+                });
+
+                const data = await response.json();
+
+                if (data.sucesso) {
+                    alert(`✅ ${data.mensagem}`);
+                    statusDiv.textContent = 'Processando...';
+                } else {
+                    throw new Error(data.erro || 'Erro desconhecido');
+                }
+
+            } catch (error) {
+                alert('❌ Erro: ' + error.message);
+                card.classList.remove('downloading');
+                card.classList.add('error');
+                statusDiv.textContent = 'Erro';
+            }
+        }
+
+        async function downloadTodos() {
+            if (!confirm('Deseja baixar shapefiles de TODOS os 9 estados?\n\nISTO PODE DEMORAR VÁRIAS HORAS e consumir muita banda!\n\nContinuar?')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/sigef/download-lote`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tipo: 'certificada_particular' })
+                });
+
+                const data = await response.json();
+
+                if (data.sucesso) {
+                    alert(`✅ ${data.mensagem}`);
+
+                    // Marcar todos como downloading
+                    estados.forEach(estado => {
+                        const card = document.getElementById(`estado-${estado}`);
+                        if (card) {
+                            card.classList.add('downloading');
+                            card.querySelector('.status').textContent = 'Na fila...';
+                        }
+                    });
+                } else {
+                    throw new Error(data.erro || 'Erro desconhecido');
+                }
+
+            } catch (error) {
+                alert('❌ Erro: ' + error.message);
+            }
+        }
+
+        async function carregarEstatisticas() {
+            try {
+                const response = await fetch(`${API_BASE}/sigef/estatisticas`);
+                const data = await response.json();
+
+                if (data.resumo) {
+                    document.getElementById('totalParcelas').textContent =
+                        Number(data.resumo.total_parcelas || 0).toLocaleString('pt-BR');
+
+                    document.getElementById('totalEstados').textContent =
+                        data.resumo.total_estados || 0;
+
+                    document.getElementById('areaTotal').textContent =
+                        Number(data.resumo.area_total_ha || 0).toLocaleString('pt-BR', {
+                            maximumFractionDigits: 0
+                        });
+                }
+
+            } catch (error) {
+                console.error('Erro ao carregar estatísticas:', error);
+                // Deixar os valores em "-" se erro
+            }
+        }
+
+        async function carregarDownloads() {
+            try {
+                const response = await fetch(`${API_BASE}/sigef/downloads`);
+                const downloads = await response.json();
+
+                const tbody = document.querySelector('#downloadsTable tbody');
+
+                if (downloads.length === 0) {
+                    tbody.innerHTML = `
+                        <tr>
+                            <td colspan="6" class="empty-state">
+                                Nenhum download realizado ainda.<br>
+                                Clique em um estado acima para iniciar!
+                            </td>
+                        </tr>
+                    `;
+                } else {
+                    tbody.innerHTML = downloads.map(d => `
+                        <tr>
+                            <td><strong>${d.estado}</strong></td>
+                            <td>${d.tipo}</td>
+                            <td>${new Date(d.data_download).toLocaleString('pt-BR')}</td>
+                            <td>${d.total_registros ? Number(d.total_registros).toLocaleString('pt-BR') : '-'}</td>
+                            <td>${d.arquivo_tamanho ? (d.arquivo_tamanho / 1024 / 1024).toFixed(2) + ' MB' : '-'}</td>
+                            <td>
+                                <span class="badge badge-${d.status === 'concluido' ? 'success' : d.status === 'erro' ? 'danger' : 'warning'}">
+                                    ${d.status}
+                                </span>
+                                ${d.erro_mensagem ? `<br><small style="color: #dc3545;">${d.erro_mensagem}</small>` : ''}
+                            </td>
+                        </tr>
+                    `).join('');
+                }
+
+                // Atualizar cards dos estados
+                downloads.forEach(d => {
+                    const card = document.getElementById(`estado-${d.estado}`);
+                    if (card) {
+                        if (d.status === 'concluido') {
+                            card.classList.remove('downloading');
+                            card.classList.add('completed');
+                            card.querySelector('.status').textContent =
+                                `✅ ${Number(d.total_registros).toLocaleString('pt-BR')} parcelas`;
+                        } else if (d.status === 'erro') {
+                            card.classList.remove('downloading');
+                            card.classList.add('error');
+                            card.querySelector('.status').textContent = '❌ Erro';
+                        } else if (d.status === 'processando') {
+                            card.classList.add('downloading');
+                            card.querySelector('.status').textContent = '⏳ Processando...';
+                        }
+                    }
+                });
+
+            } catch (error) {
+                console.error('Erro ao carregar downloads:', error);
+            }
+        }
+
+        // Inicializar
+        init();
+    </script>
+</body>
+</html>

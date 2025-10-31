@@ -30,7 +30,7 @@ module.exports = defineConfig({
   webServer: {
     command: 'node backend/server-postgres.js',
     url: 'http://localhost:3001',
-    reuseExistingServer: false,
+    reuseExistingServer: true,
     timeout: 120000,
   },
 });

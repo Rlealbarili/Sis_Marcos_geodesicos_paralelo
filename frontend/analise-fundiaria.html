@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Análise Fundiária - COGEP</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        .analise-container {
+            display: grid;
+            grid-template-columns: 350px 1fr;
+            height: 100vh;
+            gap: 0;
+        }
+
+        .sidebar {
+            background: white;
+            padding: 20px;
+            overflow-y: auto;
+            border-right: 2px solid #ddd;
+        }
+
+        .sidebar h1 {
+            margin: 0 0 10px 0;
+            font-size: 24px;
+            color: #333;
+        }
+
+        .map-container {
+            position: relative;
+        }
+
+        #map {
+            width: 100%;
+            height: 100%;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #555;
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .btn {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-primary {
+            background: #007bff;
+            color: white;
+            width: 100%;
+        }
+
+        .btn-primary:hover {
+            background: #0056b3;
+            transform: translateY(-1px);
+        }
+
+        .btn-block {
+            display: block;
+            width: 100%;
+        }
+
+        .score-badge {
+            display: inline-block;
+            padding: 12px 24px;
+            border-radius: 20px;
+            font-weight: bold;
+            font-size: 20px;
+            text-align: center;
+        }
+
+        .score-badge.baixo {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .score-badge.medio, .score-badge.médio {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .score-badge.alto {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .score-badge.critico, .score-badge.crítico {
+            background: #dc3545;
+            color: white;
+        }
+
+        .resultado-section {
+            margin: 20px 0;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #007bff;
+        }
+
+        .resultado-section h3 {
+            margin: 0 0 15px 0;
+            font-size: 16px;
+            color: #333;
+        }
+
+        .confrontante-item {
+            padding: 10px;
+            margin: 8px 0;
+            background: white;
+            border-left: 4px solid #28a745;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+
+        .sobreposicao-item {
+            padding: 10px;
+            margin: 8px 0;
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+
+        #resultados {
+            margin-top: 20px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
+
+        .map-legend {
+            position: absolute;
+            bottom: 30px;
+            right: 10px;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            z-index: 1000;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin: 5px 0;
+            font-size: 13px;
+        }
+
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            margin-right: 8px;
+            border: 2px solid #333;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+    <div class="analise-container">
+        <div class="sidebar">
+            <h1>🔬 Análise Fundiária</h1>
+            <p style="font-size: 13px; color: #666; margin-bottom: 20px;">
+                Sistema de detecção de sobreposições e análise de viabilidade
+            </p>
+
+            <div class="form-group">
+                <label>Selecionar Propriedade:</label>
+                <select id="propriedadeSelect" class="form-control">
+                    <option value="">Carregando...</option>
+                </select>
+            </div>
+
+            <button onclick="executarAnalise()" class="btn btn-primary btn-block">
+                🔍 Executar Análise Completa
+            </button>
+
+            <div id="resultados" style="display:none;">
+                <div class="resultado-section">
+                    <h3>📊 Score de Viabilidade</h3>
+                    <div id="scoreDisplay"></div>
+                    <p id="recomendacao" style="margin-top:10px; font-size:13px;"></p>
+                </div>
+
+                <div class="resultado-section">
+                    <h3>⚠️ Sobreposições</h3>
+                    <div id="sobreposicoesDisplay"></div>
+                </div>
+
+                <div class="resultado-section">
+                    <h3>👥 Confrontantes</h3>
+                    <div id="confrontantesDisplay"></div>
+                </div>
+
+                <div class="resultado-section" style="border-left-color: #6c757d;">
+                    <h3>📄 Gerar Relatórios</h3>
+                    <div style="display: grid; gap: 10px; margin-top: 10px;">
+                        <button onclick="gerarRelatorioPDF()" class="btn btn-primary">
+                            📄 Análise Completa (PDF)
+                        </button>
+                        <button onclick="gerarRelatorioConfrontantesPDF()" class="btn btn-primary">
+                            👥 Confrontantes (PDF)
+                        </button>
+                        <button onclick="gerarRelatorioViabilidadePDF()" class="btn btn-primary">
+                            ✅ Viabilidade (PDF)
+                        </button>
+                        <button onclick="gerarRelatorioConfrontantesExcel()" class="btn btn-primary">
+                            📊 Confrontantes (Excel)
+                        </button>
+                        <button onclick="gerarRelatorioConfrontantesCSV()" class="btn btn-primary">
+                            📋 Confrontantes (CSV)
+                        </button>
+                        <button onclick="gerarRelatorioSobreposicoesExcel()" class="btn btn-primary">
+                            ⚠️ Sobreposições (Excel)
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="map-container">
+            <div id="map"></div>
+
+            <div class="map-legend">
+                <strong style="display:block; margin-bottom:10px;">Legenda</strong>
+                <div class="legend-item">
+                    <div class="legend-color" style="background:#007bff;opacity:0.3;"></div>
+                    <span>Propriedade Local</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background:#dc3545;opacity:0.3;"></div>
+                    <span>Sobreposição SIGEF</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background:#28a745;opacity:0.2;"></div>
+                    <span>Confrontante</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        let map, propriedadeLayer, sigefLayer, conflitosLayer;
+        const API_BASE = 'http://localhost:3001/api';
+
+        function initMap() {
+            map = L.map('map').setView([-25.4284, -49.2733], 12);
+
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap'
+            }).addTo(map);
+
+            propriedadeLayer = L.layerGroup().addTo(map);
+            sigefLayer = L.layerGroup().addTo(map);
+            conflitosLayer = L.layerGroup().addTo(map);
+        }
+
+        async function carregarPropriedades() {
+            try {
+                const response = await fetch(`${API_BASE}/propriedades/com-score`);
+                const propriedades = await response.json();
+
+                const select = document.getElementById('propriedadeSelect');
+                select.innerHTML = '<option value="">Selecione...</option>';
+
+                propriedades.forEach(p => {
+                    const option = document.createElement('option');
+                    option.value = p.id;
+                    const scoreText = p.score !== null ? ` [Score: ${p.score}]` : '';
+                    option.textContent = `${p.nome_propriedade}${scoreText}`;
+                    select.appendChild(option);
+                });
+
+                console.log(`✅ ${propriedades.length} propriedades carregadas`);
+
+            } catch (error) {
+                console.error('Erro ao carregar propriedades:', error);
+                document.getElementById('propriedadeSelect').innerHTML =
+                    '<option value="">Erro ao carregar</option>';
+            }
+        }
+
+        async function executarAnalise() {
+            const propriedadeId = document.getElementById('propriedadeSelect').value;
+
+            if (!propriedadeId) {
+                alert('Selecione uma propriedade!');
+                return;
+            }
+
+            document.getElementById('resultados').style.display = 'block';
+
+            // Mostrar loading
+            document.getElementById('scoreDisplay').innerHTML = '⏳ Analisando...';
+            document.getElementById('sobreposicoesDisplay').innerHTML = '⏳ Verificando...';
+            document.getElementById('confrontantesDisplay').innerHTML = '⏳ Identificando...';
+
+            try {
+                console.log(`🔬 Iniciando análise completa: Propriedade #${propriedadeId}`);
+
+                const response = await fetch(`${API_BASE}/analise/completa/${propriedadeId}`, {
+                    method: 'POST'
+                });
+
+                const resultado = await response.json();
+
+                console.log('Resultado da análise:', resultado);
+
+                // Exibir score
+                exibirScore(resultado.score);
+
+                // Exibir sobreposições
+                exibirSobreposicoes(resultado.sobreposicoes);
+
+                // Exibir confrontantes
+                exibirConfrontantes(resultado.confrontantes);
+
+                // Carregar geometrias no mapa
+                await carregarNoMapa(propriedadeId, resultado);
+
+            } catch (error) {
+                console.error('Erro na análise:', error);
+                alert('Erro ao executar análise: ' + error.message);
+            }
+        }
+
+        function exibirScore(score) {
+            if (!score || !score.sucesso) {
+                document.getElementById('scoreDisplay').innerHTML =
+                    '<p style="color:red;">Erro ao calcular score</p>';
+                return;
+            }
+
+            const nivel = score.nivel_risco.toLowerCase();
+            const badgeClass = nivel === 'crítico' ? 'critico' : nivel;
+
+            document.getElementById('scoreDisplay').innerHTML = `
+                <div class="score-badge ${badgeClass}">
+                    ${score.score_total}/100 - ${score.nivel_risco}
+                </div>
+                <div style="margin-top: 15px;">
+                    <strong>Detalhes:</strong>
+                    <ul style="margin-top: 10px; padding-left: 20px; font-size:13px;">
+                        <li>Sobreposições: ${score.tem_sobreposicao ? '⚠️ SIM' : '✅ NÃO'}</li>
+                        <li>Quantidade: ${score.qtd_sobreposicoes || 0}</li>
+                        <li>Área sobreposta: ${(score.area_sobreposta_m2 || 0).toFixed(2)} m²</li>
+                        <li>Confrontantes: ${score.qtd_confrontantes || 0}</li>
+                    </ul>
+                </div>
+            `;
+
+            document.getElementById('recomendacao').innerHTML = `
+                <strong>📋 Recomendação:</strong><br>
+                ${score.recomendacao}
+            `;
+        }
+
+        function exibirSobreposicoes(sobreposicoes) {
+            const container = document.getElementById('sobreposicoesDisplay');
+
+            if (!sobreposicoes || !sobreposicoes.sucesso || sobreposicoes.total_sobreposicoes === 0) {
+                container.innerHTML = '<p style="color:green;">✅ Nenhuma sobreposição detectada!</p>';
+                return;
+            }
+
+            let html = `<p><strong>⚠️ ${sobreposicoes.total_sobreposicoes} sobreposição(ões) encontrada(s)</strong></p>`;
+
+            sobreposicoes.sobreposicoes.forEach((s, idx) => {
+                html += `
+                    <div class="sobreposicao-item">
+                        <strong>Sobreposição #${idx + 1}</strong><br>
+                        <small>Tipo: ${s.tipo_sobreposicao}</small><br>
+                        <small>Código: ${s.codigo_parcela || 'N/A'}</small><br>
+                        <small>Proprietário SIGEF: ${s.proprietario_sigef || 'N/A'}</small><br>
+                        <small>Área: ${(s.area_sobreposicao_m2 || 0).toFixed(2)} m²</small><br>
+                        <small>Percentual: ${(s.percentual_propriedade || 0).toFixed(1)}%</small>
+                    </div>
+                `;
+            });
+
+            container.innerHTML = html;
+        }
+
+        function exibirConfrontantes(confrontantes) {
+            const container = document.getElementById('confrontantesDisplay');
+
+            if (!confrontantes || !confrontantes.sucesso || confrontantes.total_confrontantes === 0) {
+                container.innerHTML = '<p>ℹ️ Nenhum confrontante identificado no raio de 100m</p>';
+                return;
+            }
+
+            let html = `<p><strong>👥 ${confrontantes.total_confrontantes} confrontante(s) identificado(s)</strong></p>`;
+
+            confrontantes.confrontantes.slice(0, 10).forEach((c, idx) => {
+                const icon = c.tipo_contato === 'limite_comum' ? '🔗' : '📍';
+
+                html += `
+                    <div class="confrontante-item">
+                        ${icon} <strong>Confrontante #${idx + 1}</strong><br>
+                        <small>Tipo: ${c.tipo_contato}</small><br>
+                        <small>Código: ${c.codigo_parcela || 'N/A'}</small><br>
+                        <small>Proprietário: ${c.proprietario || 'N/A'}</small><br>
+                        <small>Distância: ${(c.distancia_m || 0).toFixed(1)}m</small><br>
+                        ${c.comprimento_contato_m > 0 ? `<small>Contato: ${c.comprimento_contato_m.toFixed(1)}m</small>` : ''}
+                    </div>
+                `;
+            });
+
+            if (confrontantes.total_confrontantes > 10) {
+                html += `<p><small>+ ${confrontantes.total_confrontantes - 10} confrontantes não exibidos</small></p>`;
+            }
+
+            container.innerHTML = html;
+        }
+
+        async function carregarNoMapa(propriedadeId, resultado) {
+            try {
+                // Limpar camadas
+                propriedadeLayer.clearLayers();
+                sigefLayer.clearLayers();
+                conflitosLayer.clearLayers();
+
+                // Carregar propriedade local
+                const propResponse = await fetch(`${API_BASE}/propriedades/${propriedadeId}`);
+                const propriedade = await propResponse.json();
+
+                if (propriedade.geojson) {
+                    const geojson = JSON.parse(propriedade.geojson);
+
+                    const propPolygon = L.geoJSON(geojson, {
+                        style: {
+                            color: '#007bff',
+                            weight: 3,
+                            fillColor: '#007bff',
+                            fillOpacity: 0.2
+                        }
+                    }).addTo(propriedadeLayer);
+
+                    propPolygon.bindPopup(`
+                        <strong>${propriedade.nome_propriedade}</strong><br>
+                        Matrícula: ${propriedade.matricula}<br>
+                        Área: ${(propriedade.area_calculada || 0).toFixed(2)} m²
+                    `);
+
+                    // Ajustar zoom
+                    map.fitBounds(propPolygon.getBounds(), { padding: [50, 50] });
+                }
+
+                // Carregar parcelas SIGEF sobrepostas
+                if (resultado.sobreposicoes?.sobreposicoes) {
+                    for (const s of resultado.sobreposicoes.sobreposicoes) {
+                        await carregarParcelaSIGEF(s.parcela_sigef_id, 'sobreposicao');
+                    }
+                }
+
+                // Carregar confrontantes
+                if (resultado.confrontantes?.confrontantes) {
+                    for (const c of resultado.confrontantes.confrontantes.slice(0, 20)) {
+                        await carregarParcelaSIGEF(c.parcela_sigef_id, 'confrontante');
+                    }
+                }
+
+            } catch (error) {
+                console.error('Erro ao carregar no mapa:', error);
+            }
+        }
+
+        async function carregarParcelaSIGEF(parcelaId, tipo) {
+            try {
+                const response = await fetch(`${API_BASE}/sigef/parcelas/${parcelaId}`);
+                const parcela = await response.json();
+
+                if (parcela.geometry) {
+                    const geojson = typeof parcela.geometry === 'string'
+                        ? JSON.parse(parcela.geometry)
+                        : parcela.geometry;
+
+                    const cor = tipo === 'sobreposicao' ? '#dc3545' : '#28a745';
+
+                    const polygon = L.geoJSON(geojson, {
+                        style: {
+                            color: cor,
+                            weight: 2,
+                            fillColor: cor,
+                            fillOpacity: tipo === 'sobreposicao' ? 0.3 : 0.1
+                        }
+                    }).addTo(tipo === 'sobreposicao' ? conflitosLayer : sigefLayer);
+
+                    polygon.bindPopup(`
+                        <strong>${tipo === 'sobreposicao' ? '⚠️ SOBREPOSIÇÃO' : '👥 CONFRONTANTE'}</strong><br>
+                        Código: ${parcela.codigo_parcela || 'N/A'}<br>
+                        Proprietário: ${parcela.proprietario || 'N/A'}<br>
+                        Área: ${(parcela.area_hectares || 0).toFixed(2)} ha
+                    `);
+                }
+
+            } catch (error) {
+                console.error(`Erro ao carregar parcela ${parcelaId}:`, error);
+            }
+        }
+
+        // =====================================================
+        // FUNÇÕES DE GERAÇÃO DE RELATÓRIOS
+        // =====================================================
+
+        function obterPropriedadeIdAtual() {
+            const propriedadeId = document.getElementById('propriedadeSelect').value;
+            if (!propriedadeId) {
+                alert('Selecione uma propriedade primeiro!');
+                return null;
+            }
+            return propriedadeId;
+        }
+
+        function mostrarLoadingOverlay(mensagem) {
+            const overlay = document.createElement('div');
+            overlay.id = 'loading-overlay';
+            overlay.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0,0,0,0.7);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 9999;
+                color: white;
+                font-size: 18px;
+                font-weight: bold;
+            `;
+            overlay.innerHTML = `
+                <div style="text-align: center;">
+                    <div>⏳ ${mensagem}</div>
+                    <div style="margin-top: 10px; font-size: 14px; font-weight: normal;">Aguarde...</div>
+                </div>
+            `;
+            document.body.appendChild(overlay);
+        }
+
+        function removerLoadingOverlay() {
+            const overlay = document.getElementById('loading-overlay');
+            if (overlay) {
+                overlay.remove();
+            }
+        }
+
+        function mostrarToast(mensagem, tipo = 'success') {
+            const toast = document.createElement('div');
+            toast.style.cssText = `
+                position: fixed;
+                bottom: 30px;
+                right: 30px;
+                padding: 15px 25px;
+                background: ${tipo === 'success' ? '#28a745' : '#dc3545'};
+                color: white;
+                border-radius: 8px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+                z-index: 10000;
+                font-weight: 600;
+                animation: slideIn 0.3s ease;
+            `;
+            toast.textContent = mensagem;
+            document.body.appendChild(toast);
+
+            setTimeout(() => {
+                toast.style.animation = 'slideOut 0.3s ease';
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        async function downloadRelatorio(url, nomeArquivo, mensagemLoading) {
+            const propriedadeId = obterPropriedadeIdAtual();
+            if (!propriedadeId) return;
+
+            mostrarLoadingOverlay(mensagemLoading);
+
+            try {
+                const response = await fetch(url, {
+                    method: 'POST'
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Erro ${response.status}: ${response.statusText}`);
+                }
+
+                const blob = await response.blob();
+                const downloadUrl = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = downloadUrl;
+                a.download = nomeArquivo.replace('{id}', propriedadeId);
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(downloadUrl);
+
+                removerLoadingOverlay();
+                mostrarToast('✅ Relatório gerado com sucesso!', 'success');
+
+            } catch (error) {
+                console.error('Erro ao gerar relatório:', error);
+                removerLoadingOverlay();
+                mostrarToast('❌ Erro ao gerar relatório: ' + error.message, 'error');
+            }
+        }
+
+        // Funções específicas para cada tipo de relatório
+
+        function gerarRelatorioPDF() {
+            const propriedadeId = obterPropriedadeIdAtual();
+            if (!propriedadeId) return;
+
+            downloadRelatorio(
+                `${API_BASE}/relatorios/analise-completa/${propriedadeId}`,
+                `analise_completa_{id}.pdf`,
+                'Gerando Relatório de Análise Completa...'
+            );
+        }
+
+        function gerarRelatorioConfrontantesPDF() {
+            const propriedadeId = obterPropriedadeIdAtual();
+            if (!propriedadeId) return;
+
+            downloadRelatorio(
+                `${API_BASE}/relatorios/confrontantes/${propriedadeId}`,
+                `confrontantes_{id}.pdf`,
+                'Gerando Relatório de Confrontantes (PDF)...'
+            );
+        }
+
+        function gerarRelatorioViabilidadePDF() {
+            const propriedadeId = obterPropriedadeIdAtual();
+            if (!propriedadeId) return;
+
+            downloadRelatorio(
+                `${API_BASE}/relatorios/viabilidade/${propriedadeId}`,
+                `viabilidade_{id}.pdf`,
+                'Gerando Relatório de Viabilidade...'
+            );
+        }
+
+        function gerarRelatorioConfrontantesExcel() {
+            const propriedadeId = obterPropriedadeIdAtual();
+            if (!propriedadeId) return;
+
+            downloadRelatorio(
+                `${API_BASE}/relatorios/confrontantes-excel/${propriedadeId}`,
+                `confrontantes_{id}.xlsx`,
+                'Exportando Confrontantes para Excel...'
+            );
+        }
+
+        function gerarRelatorioConfrontantesCSV() {
+            const propriedadeId = obterPropriedadeIdAtual();
+            if (!propriedadeId) return;
+
+            downloadRelatorio(
+                `${API_BASE}/relatorios/confrontantes-csv/${propriedadeId}`,
+                `confrontantes_{id}.csv`,
+                'Exportando Confrontantes para CSV...'
+            );
+        }
+
+        function gerarRelatorioSobreposicoesExcel() {
+            const propriedadeId = obterPropriedadeIdAtual();
+            if (!propriedadeId) return;
+
+            downloadRelatorio(
+                `${API_BASE}/relatorios/sobreposicoes-excel/${propriedadeId}`,
+                `sobreposicoes_{id}.xlsx`,
+                'Exportando Sobreposições para Excel...'
+            );
+        }
+
+        // Inicialização
+        initMap();
+        carregarPropriedades();
+
+        // Adicionar animações CSS
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes slideIn {
+                from {
+                    transform: translateX(400px);
+                    opacity: 0;
+                }
+                to {
+                    transform: translateX(0);
+                    opacity: 1;
+                }
+            }
+            @keyframes slideOut {
+                from {
+                    transform: translateX(0);
+                    opacity: 1;
+                }
+                to {
+                    transform: translateX(400px);
+                    opacity: 0;
+                }
+            }
+        `;
+        document.head.appendChild(style);
+    </script>
+</body>
+</html>
