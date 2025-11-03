@@ -46,7 +46,13 @@
       "Bash(\"C:\\Sis_Marcos_geodesicos_paralelo-main\\ENDPOINTS_FUNCIONAIS.md\")",
       "Bash(cmd /c \"taskkill /F /PID 20192\")",
       "Bash(cmd /c \"for /f \"tokens=5\" %a in (''netstat -ano ^| findstr :3001'') do @echo %a\")",
-      "Bash(cmd.exe /c \"taskkill /F /PID 9300\")"
+      "Bash(cmd.exe /c \"taskkill /F /PID 9300\")",
+      "Bash(cmd /c \"dir frontend\\*.html /b\")",
+      "Bash(cmd /c \"taskkill /F /PID 8516\")",
+      "Bash(cmd /c \"ping 127.0.0.1 -n 6 > nul\")",
+      "Bash(cmd /c \"ping 127.0.0.1 -n 3 > nul\")",
+      "Bash(cmd /c \"ping 127.0.0.1 -n 5 > nul\")",
+      "Bash(cmd /c \"taskkill /F /PID 27200\")"
     ],
     "deny": [],
     "ask": []

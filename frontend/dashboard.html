@@ -287,6 +287,10 @@
     <script src="script.js"></script>
     <script>
         let dadosGlobais = null;
+        let chartTipos = null;
+        let chartEstados = null;
+        let chartRiscos = null;
+        let chartTimeline = null;
 
         async function carregarDados() {
             try {
@@ -403,9 +407,15 @@
         }
 
         function renderizarGraficos(dados) {
+            // Destruir gráficos existentes
+            if (chartTipos) chartTipos.destroy();
+            if (chartEstados) chartEstados.destroy();
+            if (chartRiscos) chartRiscos.destroy();
+            if (chartTimeline) chartTimeline.destroy();
+
             // Gráfico de Tipos
             const ctxTipos = document.getElementById('chartTipos').getContext('2d');
-            new Chart(ctxTipos, {
+            chartTipos = new Chart(ctxTipos, {
                 type: 'doughnut',
                 data: {
                     labels: ['Rural', 'Urbana'],
@@ -432,7 +442,7 @@
 
             // Gráfico de Estados
             const ctxEstados = document.getElementById('chartEstados').getContext('2d');
-            new Chart(ctxEstados, {
+            chartEstados = new Chart(ctxEstados, {
                 type: 'bar',
                 data: {
                     labels: dados.distribuicao.por_estado.map(e => e.estado),
@@ -464,7 +474,7 @@
 
             // Gráfico de Riscos
             const ctxRiscos = document.getElementById('chartRiscos').getContext('2d');
-            new Chart(ctxRiscos, {
+            chartRiscos = new Chart(ctxRiscos, {
                 type: 'pie',
                 data: {
                     labels: ['Risco Baixo', 'Risco Médio', 'Risco Alto'],
@@ -492,7 +502,7 @@
 
             // Gráfico de Timeline
             const ctxTimeline = document.getElementById('chartTimeline').getContext('2d');
-            new Chart(ctxTimeline, {
+            chartTimeline = new Chart(ctxTimeline, {
                 type: 'line',
                 data: {
                     labels: dados.timeline.map(t => new Date(t.data).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })).reverse(),

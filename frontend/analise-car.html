@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Análise CAR - Sistema FHV</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+        }
+
+        .car-container {
+            display: grid;
+            grid-template-columns: 350px 1fr;
+            height: 100vh;
+            gap: 0;
+        }
+
+        .sidebar {
+            background: white;
+            padding: 20px;
+            overflow-y: auto;
+            border-right: 2px solid #e0e0e0;
+        }
+
+        .map-container {
+            position: relative;
+        }
+
+        #map {
+            width: 100%;
+            height: 100%;
+        }
+
+        .section {
+            margin-bottom: 25px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+
+        .section h3 {
+            margin: 0 0 15px 0;
+            font-size: 16px;
+            color: #2c3e50;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .stat-box {
+            padding: 12px;
+            background: white;
+            border-radius: 6px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #28a745;
+        }
+
+        .stat-label {
+            font-size: 11px;
+            color: #6c757d;
+            margin-top: 4px;
+        }
+
+        .conformidade-badge {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            margin: 5px 0;
+        }
+
+        .conformidade-badge.conforme {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .conformidade-badge.atencao {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .conformidade-badge.nao-conforme {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .issue-item {
+            padding: 8px;
+            margin: 5px 0;
+            background: white;
+            border-left: 3px solid #ffc107;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+
+        .issue-item.alta {
+            border-left-color: #dc3545;
+        }
+
+        .issue-item.media {
+            border-left-color: #ffc107;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .btn {
+            flex: 1;
+            padding: 10px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            transition: all 0.3s;
+        }
+
+        .btn-primary {
+            background: #007bff;
+            color: white;
+        }
+
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
+
+        .btn-warning {
+            background: #ffc107;
+            color: #212529;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        }
+
+        .legend {
+            position: absolute;
+            bottom: 30px;
+            right: 30px;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            z-index: 1000;
+        }
+
+        .legend h4 {
+            margin: 0 0 10px 0;
+            font-size: 14px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin: 5px 0;
+            font-size: 12px;
+        }
+
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 3px;
+            border: 1px solid #333;
+        }
+
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+        }
+
+        .loading-overlay.show {
+            display: flex;
+        }
+
+        .loading-content {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            text-align: center;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #007bff;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 20px;
+            border-radius: 8px;
+            color: white;
+            font-size: 14px;
+            z-index: 10000;
+            display: none;
+            animation: slideIn 0.3s ease;
+        }
+
+        .toast.show {
+            display: block;
+        }
+
+        .toast.success {
+            background: #28a745;
+        }
+
+        .toast.error {
+            background: #dc3545;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-content">
+            <div class="spinner"></div>
+            <p id="loadingText">Carregando...</p>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <div class="car-container">
+        <div class="sidebar">
+            <h1 style="margin: 0 0 20px 0; font-size: 24px;">
+                <i class="fas fa-leaf"></i> Análise CAR
+            </h1>
+
+            <div class="section">
+                <h3><i class="fas fa-search"></i> Selecionar Propriedade</h3>
+                <select id="propriedadeSelect" class="form-control">
+                    <option value="">Carregando...</option>
+                </select>
+
+                <div class="btn-group">
+                    <button onclick="compararComCAR()" class="btn btn-primary">
+                        <i class="fas fa-balance-scale"></i> Comparar
+                    </button>
+                    <button onclick="analisarConformidade()" class="btn btn-success">
+                        <i class="fas fa-check-circle"></i> Conformidade
+                    </button>
+                </div>
+            </div>
+
+            <div class="section" id="resultadoCAR" style="display:none;">
+                <h3><i class="fas fa-file-alt"></i> Resultado CAR</h3>
+                <div id="carInfo"></div>
+            </div>
+
+            <div class="section" id="resultadoConformidade" style="display:none;">
+                <h3><i class="fas fa-shield-alt"></i> Conformidade Ambiental</h3>
+                <div id="conformidadeInfo"></div>
+            </div>
+
+            <div class="section">
+                <h3><i class="fas fa-chart-bar"></i> Estatísticas CAR</h3>
+                <div id="statsCAR">
+                    <p style="color: #6c757d; font-size: 13px;">
+                        Carregando estatísticas...
+                    </p>
+                </div>
+            </div>
+
+            <a href="index.html" class="btn btn-warning" style="text-decoration: none; margin-top: 20px;">
+                <i class="fas fa-arrow-left"></i> Voltar
+            </a>
+        </div>
+
+        <div class="map-container">
+            <div id="map"></div>
+
+            <div class="legend">
+                <h4>Legenda</h4>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #007bff;"></div>
+                    <span>Propriedade Local</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #28a745;"></div>
+                    <span>Imóvel CAR</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #ffc107;"></div>
+                    <span>Reserva Legal</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #17a2b8;"></div>
+                    <span>APP</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #dc3545;"></div>
+                    <span>Divergência</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        let map, propriedadeLayer, carLayer;
+        let propriedadeSelecionada = null;
+
+        function initMap() {
+            map = L.map('map').setView([-25.4284, -49.2733], 12);
+
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap'
+            }).addTo(map);
+
+            propriedadeLayer = L.layerGroup().addTo(map);
+            carLayer = L.layerGroup().addTo(map);
+        }
+
+        async function carregarPropriedades() {
+            try {
+                const response = await fetch('/api/propriedades');
+                const propriedades = await response.json();
+
+                const select = document.getElementById('propriedadeSelect');
+                select.innerHTML = '<option value="">Selecione...</option>';
+
+                propriedades.forEach(p => {
+                    const option = document.createElement('option');
+                    option.value = p.id;
+                    option.textContent = `${p.nome_propriedade} - ${p.municipio}/${p.uf}`;
+                    select.appendChild(option);
+                });
+
+                select.addEventListener('change', function() {
+                    if (this.value) {
+                        carregarPropriedadeNoMapa(this.value);
+                    }
+                });
+
+            } catch (error) {
+                console.error('Erro ao carregar propriedades:', error);
+            }
+        }
+
+        async function carregarPropriedadeNoMapa(propriedadeId) {
+            try {
+                propriedadeLayer.clearLayers();
+                carLayer.clearLayers();
+
+                document.getElementById('resultadoCAR').style.display = 'none';
+                document.getElementById('resultadoConformidade').style.display = 'none';
+
+                const response = await fetch(`/api/propriedades/${propriedadeId}`);
+                const propriedade = await response.json();
+
+                propriedadeSelecionada = propriedade;
+
+                if (propriedade.geojson) {
+                    const geojson = JSON.parse(propriedade.geojson);
+
+                    const layer = L.geoJSON(geojson, {
+                        style: {
+                            color: '#007bff',
+                            weight: 3,
+                            fillColor: '#007bff',
+                            fillOpacity: 0.2
+                        }
+                    }).addTo(propriedadeLayer);
+
+                    layer.bindPopup(`
+                        <strong>${propriedade.nome_propriedade}</strong><br>
+                        Área: ${(propriedade.area_calculada/10000).toFixed(2)} ha
+                    `);
+
+                    map.fitBounds(layer.getBounds(), { padding: [50, 50] });
+                }
+
+            } catch (error) {
+                console.error('Erro ao carregar propriedade:', error);
+            }
+        }
+
+        async function compararComCAR() {
+            const propriedadeId = document.getElementById('propriedadeSelect').value;
+
+            if (!propriedadeId) {
+                showError('Selecione uma propriedade!');
+                return;
+            }
+
+            try {
+                showLoading('Comparando com CAR...');
+
+                const response = await fetch(`/api/car/comparar/${propriedadeId}`, {
+                    method: 'POST'
+                });
+
+                const resultado = await response.json();
+
+                hideLoading();
+
+                if (!resultado.sucesso) {
+                    showError('Erro ao comparar: ' + (resultado.erro || 'Erro desconhecido'));
+                    return;
+                }
+
+                exibirResultadoCAR(resultado);
+                showSuccess(`Comparação concluída! ${resultado.total_car_encontrados} imóveis CAR encontrados.`);
+
+            } catch (error) {
+                hideLoading();
+                showError('Erro ao comparar: ' + error.message);
+            }
+        }
+
+        function exibirResultadoCAR(resultado) {
+            const container = document.getElementById('carInfo');
+            const section = document.getElementById('resultadoCAR');
+
+            if (resultado.total_car_encontrados === 0) {
+                container.innerHTML = `
+                    <p style="color: #6c757d;">
+                        <i class="fas fa-info-circle"></i>
+                        Nenhum imóvel CAR encontrado para esta propriedade.
+                    </p>
+                `;
+                section.style.display = 'block';
+                return;
+            }
+
+            let html = `<p><strong>${resultado.total_car_encontrados} imóvel(is) CAR encontrado(s)</strong></p>`;
+
+            resultado.imoveis_car.slice(0, 3).forEach((car, idx) => {
+                html += `
+                    <div style="padding: 10px; background: white; margin: 8px 0; border-radius: 6px; border-left: 3px solid #28a745;">
+                        <strong>CAR #${idx + 1}</strong><br>
+                        <small>Código: ${car.codigo_imovel || 'N/A'}</small><br>
+                        <small>N° CAR: ${car.numero_car || 'N/A'}</small><br>
+                        <small>Proprietário: ${car.nome_proprietario || 'N/A'}</small><br>
+                        <small>Área CAR: ${Number(car.area_car_ha).toFixed(2)} ha</small><br>
+                        <small>Intersecção: ${Number(car.area_intersecao_m2/10000).toFixed(2)} ha (${Number(car.percentual_intersecao).toFixed(1)}%)</small><br>
+                        <small>Divergência: ${Number(car.diferenca_percentual).toFixed(1)}%</small>
+                    </div>
+                `;
+            });
+
+            if (resultado.total_car_encontrados > 3) {
+                html += `<p><small>+ ${resultado.total_car_encontrados - 3} imóveis não exibidos</small></p>`;
+            }
+
+            container.innerHTML = html;
+            section.style.display = 'block';
+        }
+
+        async function analisarConformidade() {
+            const propriedadeId = document.getElementById('propriedadeSelect').value;
+
+            if (!propriedadeId) {
+                showError('Selecione uma propriedade!');
+                return;
+            }
+
+            try {
+                showLoading('Analisando conformidade ambiental...');
+
+                const response = await fetch(`/api/car/conformidade/${propriedadeId}`);
+                const resultado = await response.json();
+
+                hideLoading();
+
+                if (!resultado.sucesso) {
+                    showError('Erro ao analisar: ' + (resultado.erro || 'Erro desconhecido'));
+                    return;
+                }
+
+                exibirConformidade(resultado);
+                showSuccess('Análise de conformidade concluída!');
+
+            } catch (error) {
+                hideLoading();
+                showError('Erro ao analisar: ' + error.message);
+            }
+        }
+
+        function exibirConformidade(resultado) {
+            const container = document.getElementById('conformidadeInfo');
+            const section = document.getElementById('resultadoConformidade');
+
+            if (!resultado.tem_car) {
+                container.innerHTML = `
+                    <p style="color: #856404; background: #fff3cd; padding: 10px; border-radius: 6px;">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        ${resultado.mensagem}
+                    </p>
+                `;
+                section.style.display = 'block';
+                return;
+            }
+
+            const badgeClass = resultado.conforme ? 'conforme' :
+                               resultado.nivel_conformidade === 'ATENÇÃO_NECESSÁRIA' ? 'atencao' : 'nao-conforme';
+
+            let html = `
+                <div class="conformidade-badge ${badgeClass}">
+                    ${resultado.nivel_conformidade.replace('_', ' ')}
+                </div>
+
+                <div class="stats-grid" style="margin-top: 15px;">
+                    <div class="stat-box">
+                        <div class="stat-value">${Number(resultado.areas.imovel_ha).toFixed(1)}</div>
+                        <div class="stat-label">Área Total (ha)</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-value">${resultado.percentuais.vegetacao_nativa}%</div>
+                        <div class="stat-label">Veg. Nativa</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-value">${resultado.percentuais.reserva_legal}%</div>
+                        <div class="stat-label">Reserva Legal</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-value">${Number(resultado.areas.app_ha || 0).toFixed(1)}</div>
+                        <div class="stat-label">APP (ha)</div>
+                    </div>
+                </div>
+            `;
+
+            if (resultado.issues && resultado.issues.length > 0) {
+                html += '<p style="margin: 15px 0 8px 0; font-weight: 600;">Não Conformidades:</p>';
+                resultado.issues.forEach(issue => {
+                    html += `
+                        <div class="issue-item ${issue.gravidade}">
+                            <i class="fas fa-exclamation-circle"></i> ${issue.mensagem}
+                        </div>
+                    `;
+                });
+            } else {
+                html += '<p style="color: #28a745; margin-top: 10px;"><i class="fas fa-check-circle"></i> Nenhuma não conformidade encontrada!</p>';
+            }
+
+            container.innerHTML = html;
+            section.style.display = 'block';
+        }
+
+        async function carregarEstatisticasCAR() {
+            try {
+                const response = await fetch('/api/car/estatisticas');
+                const data = await response.json();
+
+                if (!data.sucesso) {
+                    document.getElementById('statsCAR').innerHTML = `
+                        <p style="color: #6c757d; font-size: 13px;">
+                            Nenhum dado CAR disponível
+                        </p>
+                    `;
+                    return;
+                }
+
+                const stats = data.geral;
+
+                const html = `
+                    <div class="stats-grid">
+                        <div class="stat-box">
+                            <div class="stat-value">${Number(stats.total_imoveis || 0)}</div>
+                            <div class="stat-label">Imóveis CAR</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-value">${Number(stats.area_total_ha || 0).toFixed(0)}</div>
+                            <div class="stat-label">Área Total (ha)</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-value">${Number(stats.total_reserva_legal_ha || 0).toFixed(0)}</div>
+                            <div class="stat-label">Reserva Legal (ha)</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-value">${Number(stats.total_app_ha || 0).toFixed(0)}</div>
+                            <div class="stat-label">APP (ha)</div>
+                        </div>
+                    </div>
+                `;
+
+                document.getElementById('statsCAR').innerHTML = html;
+
+            } catch (error) {
+                console.error('Erro ao carregar estatísticas CAR:', error);
+            }
+        }
+
+        function showLoading(text) {
+            document.getElementById('loadingText').textContent = text;
+            document.getElementById('loadingOverlay').classList.add('show');
+        }
+
+        function hideLoading() {
+            document.getElementById('loadingOverlay').classList.remove('show');
+        }
+
+        function showSuccess(message) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = 'toast success show';
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 3000);
+        }
+
+        function showError(message) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = 'toast error show';
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 3000);
+        }
+
+        // Inicialização
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('✅ Página de Análise CAR carregada');
+            initMap();
+            carregarPropriedades();
+            carregarEstatisticasCAR();
+        });
+    </script>
+</body>
+</html>

@@ -1,4 +1,5 @@
 const fetch = require('node-fetch');
+const https = require('https');
 const fs = require('fs');
 const path = require('path');
 const AdmZip = require('adm-zip');
@@ -11,9 +12,12 @@ class SIGEFDownloader {
         this.estados = ['PR', 'SC', 'RS', 'SP', 'MG', 'MS', 'GO', 'MT', 'DF'];
 
         // URLs dos shapefiles SIGEF por tipo
+        // NOTA: A partir de 2025, o INCRA mudou o formato da URL
+        // Formato antigo: Imóvel certificado SNCI {ESTADO}_particular.zip
+        // Formato novo: Imóvel certificado SNCI Brasil_{ESTADO}.zip
         this.urlTemplates = {
-            certificada_particular: 'https://certificacao.incra.gov.br/csv_shp/zip/Imóvel certificado SNCI {ESTADO}_particular.zip',
-            certificada_publico: 'https://certificacao.incra.gov.br/csv_shp/zip/Imóvel certificado SNCI {ESTADO}_público.zip',
+            certificada_particular: 'https://certificacao.incra.gov.br/csv_shp/zip/Imóvel certificado SNCI Brasil_{ESTADO}.zip',
+            certificada_publico: 'https://certificacao.incra.gov.br/csv_shp/zip/Imóvel certificado SNCI Brasil_{ESTADO}.zip',
             // URL alternativa caso primeira falhe
             backup_url: 'http://acervofundiario.incra.gov.br/acervo/acv.php'
         };
@@ -52,9 +56,21 @@ class SIGEFDownloader {
 
             console.log(`🌐 URL: ${url}`);
 
+            // Configurar agent HTTPS para aceitar certificados do INCRA
+            // NOTA: O servidor certificacao.incra.gov.br possui certificado SSL que
+            // não é validado corretamente pelo Node.js. Esta configuração é necessária
+            // para permitir o download dos arquivos SIGEF.
+            const httpsAgent = new https.Agent({
+                rejectUnauthorized: false, // Aceita certificados auto-assinados
+                keepAlive: true
+            });
+
+            console.log(`🔒 SSL: Configurado para aceitar certificado do servidor INCRA`);
+
             // Download com timeout
             const response = await fetch(url, {
                 timeout: 300000, // 5 minutos
+                agent: httpsAgent,
                 headers: {
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
                 }

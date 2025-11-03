@@ -1806,6 +1806,346 @@ app.get('/api/dashboard/top-propriedades', async (req, res) => {
 
 console.log('✅ Rotas de dashboard carregadas');
 
+// =====================================================
+// MÓDULOS CAR
+// =====================================================
+
+const CARDownloader = require('./car-downloader');
+const CARAnalyzer = require('./car-analyzer');
+
+const carDownloader = new CARDownloader(pool);
+const carAnalyzer = new CARAnalyzer(pool);
+
+// =====================================================
+// ROTAS CAR - CADASTRO AMBIENTAL RURAL
+// =====================================================
+
+// POST /api/car/download/:estado - Iniciar download CAR
+app.post('/api/car/download/:estado', async (req, res) => {
+    try {
+        const { estado } = req.params;
+        const { tipo } = req.body;
+
+        console.log(`📥 Download CAR solicitado: ${estado} - ${tipo || 'imovel'}`);
+
+        // Registrar tentativa de download
+        const resultado = await carDownloader.downloadEstado(estado, tipo || 'imovel');
+
+        res.json({
+            sucesso: true,
+            mensagem: `Download CAR registrado para ${estado}. Faça o download manual em: https://www.car.gov.br/publico/imoveis/index`,
+            instrucoes: resultado.instrucoes,
+            download_id: resultado.download_id
+        });
+
+    } catch (error) {
+        console.error('❌ Erro ao registrar download CAR:', error);
+        res.status(500).json({ erro: error.message });
+    }
+});
+
+// POST /api/car/importar-manual - Importar shapefile CAR manualmente
+app.post('/api/car/importar-manual', async (req, res) => {
+    try {
+        const { estado, shapefile_path } = req.body;
+
+        if (!estado || !shapefile_path) {
+            return res.status(400).json({
+                erro: 'Parâmetros obrigatórios: estado, shapefile_path'
+            });
+        }
+
+        console.log(`📥 Importando shapefile CAR: ${estado} - ${shapefile_path}`);
+
+        // Executar importação em background
+        carDownloader.importarShapefileManual(estado, shapefile_path)
+            .then(resultado => {
+                console.log(`✅ Importação CAR ${estado} finalizada:`, resultado);
+            })
+            .catch(error => {
+                console.error(`❌ Erro na importação CAR ${estado}:`, error);
+            });
+
+        res.json({
+            sucesso: true,
+            mensagem: `Importação iniciada para ${estado}. Acompanhe o progresso no console.`
+        });
+
+    } catch (error) {
+        console.error('❌ Erro ao importar shapefile CAR:', error);
+        res.status(500).json({ erro: error.message });
+    }
+});
+
+// GET /api/car/estatisticas - Estatísticas gerais CAR
+app.get('/api/car/estatisticas', async (req, res) => {
+    try {
+        const { estado } = req.query;
+
+        console.log(`📊 Buscando estatísticas CAR${estado ? ` - ${estado}` : ''}`);
+
+        const estatisticas = await carAnalyzer.obterEstatisticasCAR(estado || null);
+
+        res.json({
+            sucesso: true,
+            estatisticas
+        });
+
+    } catch (error) {
+        console.error('❌ Erro ao buscar estatísticas CAR:', error);
+        res.status(500).json({ erro: error.message });
+    }
+});
+
+// GET /api/car/imoveis - Buscar imóveis CAR com filtros
+app.get('/api/car/imoveis', async (req, res) => {
+    try {
+        const { estado, municipio, codigo_imovel, numero_car, proprietario, limite } = req.query;
+
+        let sql = `
+            SELECT
+                id, codigo_imovel, numero_car, cpf_cnpj, nome_proprietario,
+                estado, municipio, area_imovel, area_vegetacao_nativa,
+                area_app, area_reserva_legal, status_car, tipo_imovel,
+                ST_AsGeoJSON(geometry) as geometry_json,
+                created_at
+            FROM car_imoveis
+            WHERE 1=1
+        `;
+        const params = [];
+        let paramCount = 1;
+
+        if (estado) {
+            sql += ` AND estado = $${paramCount}`;
+            params.push(estado);
+            paramCount++;
+        }
+
+        if (municipio) {
+            sql += ` AND municipio ILIKE $${paramCount}`;
+            params.push(`%${municipio}%`);
+            paramCount++;
+        }
+
+        if (codigo_imovel) {
+            sql += ` AND codigo_imovel = $${paramCount}`;
+            params.push(codigo_imovel);
+            paramCount++;
+        }
+
+        if (numero_car) {
+            sql += ` AND numero_car = $${paramCount}`;
+            params.push(numero_car);
+            paramCount++;
+        }
+
+        if (proprietario) {
+            sql += ` AND nome_proprietario ILIKE $${paramCount}`;
+            params.push(`%${proprietario}%`);
+            paramCount++;
+        }
+
+        sql += ` ORDER BY created_at DESC LIMIT ${parseInt(limite) || 100}`;
+
+        const result = await query(sql, params);
+
+        res.json({
+            sucesso: true,
+            total: result.rows.length,
+            imoveis: result.rows
+        });
+
+    } catch (error) {
+        console.error('❌ Erro ao buscar imóveis CAR:', error);
+        res.status(500).json({ erro: error.message });
+    }
+});
+
+// GET /api/car/imoveis/:id - Buscar imóvel CAR específico
+app.get('/api/car/imoveis/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const result = await query(`
+            SELECT
+                ci.id, ci.codigo_imovel, ci.numero_car, ci.cpf_cnpj,
+                ci.nome_proprietario, ci.estado, ci.municipio,
+                ci.area_imovel, ci.area_vegetacao_nativa,
+                ci.area_app, ci.area_reserva_legal,
+                ci.area_uso_consolidado, ci.status_car, ci.tipo_imovel,
+                ST_AsGeoJSON(ci.geometry) as geometry,
+                ci.created_at,
+                cd.data_download, cd.arquivo_nome
+            FROM car_imoveis ci
+            LEFT JOIN car_downloads cd ON ci.download_id = cd.id
+            WHERE ci.id = $1
+        `, [id]);
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ erro: 'Imóvel CAR não encontrado' });
+        }
+
+        res.json({
+            sucesso: true,
+            imovel: result.rows[0]
+        });
+
+    } catch (error) {
+        console.error('❌ Erro ao buscar imóvel CAR:', error);
+        res.status(500).json({ erro: error.message });
+    }
+});
+
+// POST /api/car/comparar/:propriedadeId - Comparar propriedade com CAR
+app.post('/api/car/comparar/:propriedadeId', async (req, res) => {
+    try {
+        const { propriedadeId } = req.params;
+
+        console.log(`🔍 Comparando propriedade ${propriedadeId} com CAR...`);
+
+        const resultado = await carAnalyzer.compararPropriedadeComCAR(propriedadeId);
+
+        if (!resultado.sucesso) {
+            return res.status(404).json({
+                erro: resultado.mensagem || 'Propriedade não encontrada'
+            });
+        }
+
+        res.json({
+            sucesso: true,
+            propriedade_id: propriedadeId,
+            comparacoes: resultado.comparacoes,
+            total_encontradas: resultado.total_encontradas
+        });
+
+    } catch (error) {
+        console.error('❌ Erro ao comparar com CAR:', error);
+        res.status(500).json({ erro: error.message });
+    }
+});
+
+// GET /api/car/conformidade/:propriedadeId - Analisar conformidade ambiental
+app.get('/api/car/conformidade/:propriedadeId', async (req, res) => {
+    try {
+        const { propriedadeId } = req.params;
+
+        console.log(`🌿 Analisando conformidade ambiental - propriedade ${propriedadeId}`);
+
+        const resultado = await carAnalyzer.analisarConformidadeAmbiental(propriedadeId);
+
+        if (!resultado.sucesso) {
+            return res.status(404).json({
+                erro: resultado.mensagem || 'Propriedade não encontrada ou sem correspondência CAR'
+            });
+        }
+
+        res.json({
+            sucesso: true,
+            propriedade_id: propriedadeId,
+            car: resultado.car,
+            conformidade: resultado.conformidade,
+            nivel: resultado.nivel,
+            issues: resultado.issues
+        });
+
+    } catch (error) {
+        console.error('❌ Erro ao analisar conformidade:', error);
+        res.status(500).json({ erro: error.message });
+    }
+});
+
+// GET /api/car/comparacoes - Listar todas as comparações realizadas
+app.get('/api/car/comparacoes', async (req, res) => {
+    try {
+        const { limite } = req.query;
+
+        const result = await query(`
+            SELECT
+                id, propriedade_id, car_imovel_id,
+                area_sobreposicao_m2, percentual_sobreposicao,
+                divergencia_area, classificacao,
+                analisado_em
+            FROM comparacao_sigef_car
+            ORDER BY analisado_em DESC
+            LIMIT $1
+        `, [parseInt(limite) || 50]);
+
+        res.json({
+            sucesso: true,
+            total: result.rows.length,
+            comparacoes: result.rows
+        });
+
+    } catch (error) {
+        console.error('❌ Erro ao listar comparações:', error);
+        res.status(500).json({ erro: error.message });
+    }
+});
+
+// GET /api/car/exportar-geojson - Exportar dados CAR como GeoJSON
+app.get('/api/car/exportar-geojson', async (req, res) => {
+    try {
+        const { estado, municipio, limite } = req.query;
+
+        let sql = `
+            SELECT
+                codigo_imovel, numero_car, nome_proprietario,
+                estado, municipio, area_imovel,
+                area_vegetacao_nativa, area_reserva_legal,
+                status_car, tipo_imovel,
+                ST_AsGeoJSON(geometry) as geometry
+            FROM car_imoveis
+            WHERE geometry IS NOT NULL
+        `;
+        const params = [];
+        let paramCount = 1;
+
+        if (estado) {
+            sql += ` AND estado = $${paramCount}`;
+            params.push(estado);
+            paramCount++;
+        }
+
+        if (municipio) {
+            sql += ` AND municipio ILIKE $${paramCount}`;
+            params.push(`%${municipio}%`);
+            paramCount++;
+        }
+
+        sql += ` ORDER BY created_at DESC LIMIT ${parseInt(limite) || 1000}`;
+
+        const result = await query(sql, params);
+
+        const geojson = {
+            type: 'FeatureCollection',
+            features: result.rows.map(row => ({
+                type: 'Feature',
+                properties: {
+                    codigo_imovel: row.codigo_imovel,
+                    numero_car: row.numero_car,
+                    nome_proprietario: row.nome_proprietario,
+                    estado: row.estado,
+                    municipio: row.municipio,
+                    area_imovel: parseFloat(row.area_imovel),
+                    area_vegetacao_nativa: parseFloat(row.area_vegetacao_nativa),
+                    area_reserva_legal: parseFloat(row.area_reserva_legal),
+                    status_car: row.status_car,
+                    tipo_imovel: row.tipo_imovel
+                },
+                geometry: JSON.parse(row.geometry)
+            }))
+        };
+
+        res.json(geojson);
+
+    } catch (error) {
+        console.error('❌ Erro ao exportar GeoJSON CAR:', error);
+        res.status(500).json({ erro: error.message });
+    }
+});
+
+console.log('✅ Rotas CAR carregadas');
+
 // ============================================
 // ERROR HANDLER
 // ============================================
