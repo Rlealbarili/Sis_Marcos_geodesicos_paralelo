@@ -1,0 +1,824 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Importar Memorial Descritivo - Sistema COGEP</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+/* Estilos do formulário de confirmação */
+#formulario-confirmacao {
+    display: none;
+    background: white;
+    border-radius: 8px;
+    padding: 30px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    margin-top: 20px;
+}
+
+#formulario-confirmacao h3 {
+    color: #2c3e50;
+    margin-top: 25px;
+    margin-bottom: 15px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #3498db;
+}
+
+#formulario-confirmacao h3:first-child {
+    margin-top: 0;
+}
+
+.form-group {
+    margin-bottom: 15px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: 600;
+    color: #34495e;
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+    box-sizing: border-box;
+}
+
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+    outline: none;
+    border-color: #3498db;
+    box-shadow: 0 0 5px rgba(52, 152, 219, 0.3);
+}
+
+.form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
+}
+
+.form-row-3 {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr;
+    gap: 15px;
+}
+
+.radio-group {
+    display: flex;
+    gap: 20px;
+    margin-bottom: 15px;
+}
+
+.radio-group label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.radio-group input[type="radio"] {
+    width: auto;
+    margin: 0;
+}
+
+#cliente-existente-campos,
+#cliente-novo-campos {
+    display: none;
+    background: #f8f9fa;
+    padding: 20px;
+    border-radius: 6px;
+    margin-top: 15px;
+}
+
+.info-card {
+    background: #e8f4fd;
+    border-left: 4px solid #3498db;
+    padding: 15px;
+    margin-bottom: 15px;
+    border-radius: 4px;
+}
+
+.info-card strong {
+    color: #2980b9;
+}
+
+.vertices-tabela {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+    font-size: 13px;
+}
+
+.vertices-tabela th,
+.vertices-tabela td {
+    padding: 8px;
+    text-align: left;
+    border: 1px solid #ddd;
+}
+
+.vertices-tabela th {
+    background: #3498db;
+    color: white;
+    font-weight: 600;
+}
+
+.vertices-tabela tr:nth-child(even) {
+    background: #f8f9fa;
+}
+
+.botoes-confirmacao {
+    display: flex;
+    gap: 15px;
+    margin-top: 30px;
+    padding-top: 20px;
+    border-top: 2px solid #ecf0f1;
+}
+
+.btn {
+    padding: 12px 30px;
+    border: none;
+    border-radius: 5px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.btn-primary {
+    background: #3498db;
+    color: white;
+}
+
+.btn-primary:hover {
+    background: #2980b9;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(52, 152, 219, 0.3);
+}
+
+.btn-secondary {
+    background: #95a5a6;
+    color: white;
+}
+
+.btn-secondary:hover {
+    background: #7f8c8d;
+}
+
+.btn-primary:disabled {
+    background: #bdc3c7;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.loading {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 3px solid rgba(255,255,255,.3);
+    border-radius: 50%;
+    border-top-color: #fff;
+    animation: spin 1s ease-in-out infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.mensagem-sucesso {
+    background: #d4edda;
+    border: 1px solid #c3e6cb;
+    border-left: 4px solid #28a745;
+    color: #155724;
+    padding: 15px;
+    border-radius: 4px;
+    margin-top: 20px;
+}
+
+.mensagem-erro {
+    background: #f8d7da;
+    border: 1px solid #f5c6cb;
+    border-left: 4px solid #dc3545;
+    color: #721c24;
+    padding: 15px;
+    border-radius: 4px;
+    margin-top: 20px;
+}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📄 Importar Memorial Descritivo</h1>
+            <p>Faça upload de um arquivo .docx para extrair os vértices.</p>
+            <div class="nav-buttons">
+                <a href="index.html">🏠 Início</a>
+            </div>
+        </div>
+
+        <div class="card">
+            <form id="uploadForm">
+                <div class="upload-area" id="uploadArea">
+                    <div class="upload-icon">📁</div>
+                    <h3>Clique para selecionar ou arraste o arquivo</h3>
+                    <p>Formatos aceitos: .doc, .docx</p>
+                    <input type="file" id="fileInput" name="files" accept=".doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" style="display: none;">
+                </div>
+                
+                <div class="file-info" id="fileInfo">
+                    <strong>📎 Arquivo selecionado:</strong>
+                    <p id="fileName"></p>
+                </div>
+                
+                <div style="text-align: center; margin-top: 30px;">
+                    <button type="submit" class="btn btn-primary" id="btnImportar" disabled>
+                        🚀 Processar Memorial
+                    </button>
+                </div>
+            </form>
+
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <p>Processando memorial...</p>
+            </div>
+            
+            <pre id="jsonOutput"></pre>
+        </div>
+    </div>
+
+    <script>
+        // Variável global para armazenar os dados extraídos
+        let dadosExtraidos = null;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const uploadForm = document.getElementById('uploadForm');
+            const uploadArea = document.getElementById('uploadArea');
+            const fileInput = document.getElementById('fileInput');
+            const fileInfo = document.getElementById('fileInfo');
+            const fileName = document.getElementById('fileName');
+            const btnImportar = document.getElementById('btnImportar');
+            const loading = document.getElementById('loading');
+            const jsonOutput = document.getElementById('jsonOutput');
+            let selectedFile = null;
+
+            // Configurar listeners para alternância entre cliente existente/novo
+            document.querySelectorAll('input[name="tipo-cliente"]').forEach(radio => {
+                radio.addEventListener('change', (e) => {
+                    if (e.target.value === 'existente') {
+                        document.getElementById('cliente-existente-campos').style.display = 'block';
+                        document.getElementById('cliente-novo-campos').style.display = 'none';
+                    } else {
+                        document.getElementById('cliente-existente-campos').style.display = 'none';
+                        document.getElementById('cliente-novo-campos').style.display = 'block';
+                    }
+                });
+            });
+
+            // Mostrar campos de cliente existente por padrão
+            document.getElementById('cliente-existente-campos').style.display = 'block';
+
+            // Carregar clientes existentes
+            carregarClientes();
+
+            const handleFile = (file) => {
+                // Validação case-insensitive para .doc e .docx
+                const validExtensions = ['.doc', '.docx'];
+                const fileNameLower = file.name.toLowerCase();
+                const isValid = validExtensions.some(ext => fileNameLower.endsWith(ext));
+
+                if (!isValid) {
+                    alert('Arquivo inválido! Use apenas arquivos Word (.doc ou .docx)');
+                    return;
+                }
+
+                selectedFile = file;
+                fileName.textContent = `${file.name} (${(file.size / 1024).toFixed(2)} KB)`;
+                fileInfo.style.display = 'block';
+                btnImportar.disabled = false;
+                jsonOutput.textContent = '';
+            };
+
+            uploadArea.addEventListener('click', () => fileInput.click());
+            fileInput.addEventListener('change', (e) => {
+                if (e.target.files.length > 0) handleFile(e.target.files[0]);
+            });
+
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                uploadArea.addEventListener(eventName, (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                }, false);
+            });
+
+            uploadArea.addEventListener('drop', (e) => {
+                const files = e.dataTransfer.files;
+                if (files.length > 0) handleFile(files[0]);
+            });
+
+            uploadForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                if (!selectedFile) {
+                    alert('Selecione um arquivo primeiro!');
+                    return;
+                }
+
+                loading.style.display = 'block';
+                btnImportar.disabled = true;
+                jsonOutput.textContent = '';
+
+                const formData = new FormData();
+                formData.append('files', selectedFile); // NOME DO CAMPO CORRIGIDO
+
+                try {
+                    const response = await fetch('/api/importar-memorial-v2', {
+                        method: 'POST',
+                        body: formData,
+                    });
+
+                    if (response.ok) {
+                        const data = await response.json();
+                        dadosExtraidos = data;
+
+                        // Esconder o JSON output e mostrar o formulário de confirmação
+                        jsonOutput.style.display = 'none';
+                        preencherFormularioConfirmacao(data, selectedFile.name);
+
+                    } else {
+                        const errorText = await response.text();
+                        jsonOutput.style.display = 'block';
+                        jsonOutput.style.color = '#721c24';
+                        jsonOutput.textContent = `Erro ${response.status}:
+${errorText}`;
+                    }
+                } catch (error) {
+                    console.error('Erro de conexão:', error);
+                    jsonOutput.style.display = 'block';
+                    jsonOutput.style.color = '#721c24';
+                    jsonOutput.textContent = 'Erro de conexão. Verifique se o servidor está no ar e o serviço Unstructured está acessível.';
+                } finally {
+                    loading.style.display = 'none';
+                    btnImportar.disabled = false;
+                }
+            });
+        });
+
+        // Função para carregar clientes existentes
+        async function carregarClientes() {
+            try {
+                const response = await fetch('/api/clientes?limite=1000');
+                if (response.ok) {
+                    const result = await response.json();
+                    const select = document.getElementById('select-cliente');
+                    select.innerHTML = '<option value="">Selecione um cliente...</option>';
+
+                    if (result.success && result.data && result.data.length > 0) {
+                        result.data.forEach(cliente => {
+                            const option = document.createElement('option');
+                            option.value = cliente.id;
+                            option.textContent = `${cliente.nome}${cliente.cpf_cnpj ? ' - ' + cliente.cpf_cnpj : ''}`;
+                            select.appendChild(option);
+                        });
+                    } else {
+                        select.innerHTML = '<option value="">Nenhum cliente cadastrado</option>';
+                    }
+                } else {
+                    console.error('Erro ao carregar clientes');
+                    document.getElementById('select-cliente').innerHTML = '<option value="">Erro ao carregar clientes</option>';
+                }
+            } catch (error) {
+                console.error('Erro ao carregar clientes:', error);
+                document.getElementById('select-cliente').innerHTML = '<option value="">Erro ao carregar clientes</option>';
+            }
+        }
+
+        // Função para preencher o formulário de confirmação
+        function preencherFormularioConfirmacao(responseData, nomeArquivo) {
+            console.log('Preenchendo formulário com dados:', responseData);
+
+            // Extrair dados da estrutura da resposta
+            const data = responseData.data || responseData;
+            const metadata = data.metadata || {};
+            const vertices = data.vertices || [];
+            const estatisticas = data.estatisticas || {};
+
+            // Preencher info do memorial
+            document.getElementById('info-arquivo').textContent = `📄 Arquivo: ${nomeArquivo}`;
+            document.getElementById('info-vertices').textContent = `📍 Vértices encontrados: ${estatisticas.vertices_unicos || vertices.length}`;
+
+            if (metadata.area) {
+                const areaHa = (metadata.area / 10000).toFixed(2);
+                document.getElementById('info-area').textContent = `📐 Área: ${metadata.area.toLocaleString('pt-BR')} m² (${areaHa} ha)`;
+            } else {
+                document.getElementById('info-area').textContent = `📐 Área: Não disponível`;
+            }
+
+            // Preencher dados da propriedade extraídos do metadata
+            if (metadata.imovel) {
+                document.getElementById('prop-nome').value = metadata.imovel;
+            }
+            if (metadata.matricula) {
+                document.getElementById('prop-matricula').value = metadata.matricula;
+            }
+            if (metadata.municipio) {
+                document.getElementById('prop-municipio').value = metadata.municipio;
+            }
+            if (metadata.uf) {
+                document.getElementById('prop-uf').value = metadata.uf;
+            }
+            if (metadata.area) {
+                document.getElementById('prop-area').value = metadata.area;
+            }
+            if (metadata.perimetro) {
+                document.getElementById('prop-perimetro').value = metadata.perimetro;
+            }
+
+            // Preencher dados do cliente (se houver proprietário extraído)
+            if (metadata.proprietarios && metadata.proprietarios.length > 0) {
+                document.getElementById('cliente-nome').value = metadata.proprietarios[0];
+            }
+
+            // Preencher tabela de vértices
+            const tbody = document.getElementById('vertices-tbody');
+            tbody.innerHTML = '';
+
+            if (vertices && vertices.length > 0) {
+                vertices.forEach((vertice, index) => {
+                    const coords = vertice.coordenadas || {};
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td>${index + 1}</td>
+                        <td>${vertice.nome || '-'}</td>
+                        <td>${coords.e ? coords.e.toFixed(2) : '-'}</td>
+                        <td>${coords.n ? coords.n.toFixed(2) : '-'}</td>
+                        <td>${coords.lat_original ? coords.lat_original.toFixed(6) : '-'}</td>
+                        <td>${coords.lon_original ? coords.lon_original.toFixed(6) : '-'}</td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            }
+
+            // Mostrar o formulário
+            document.getElementById('formulario-confirmacao').style.display = 'block';
+
+            // Scroll suave até o formulário
+            setTimeout(() => {
+                document.getElementById('formulario-confirmacao').scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'start'
+                });
+            }, 100);
+        }
+
+        // Função para salvar o memorial completo
+        async function salvarMemorialCompleto() {
+            const btnSalvar = document.getElementById('btn-salvar');
+            const mensagemFinal = document.getElementById('mensagem-final');
+
+            mensagemFinal.innerHTML = '';
+
+            // Validação
+            const tipoCliente = document.querySelector('input[name="tipo-cliente"]:checked').value;
+            let clienteId = null;
+            let novoCliente = null;
+
+            if (tipoCliente === 'existente') {
+                clienteId = document.getElementById('select-cliente').value;
+                if (!clienteId) {
+                    mensagemFinal.innerHTML = '<div class="mensagem-erro">❌ Por favor, selecione um cliente.</div>';
+                    return;
+                }
+                clienteId = parseInt(clienteId);
+            } else {
+                const nome = document.getElementById('cliente-nome').value.trim();
+                if (!nome) {
+                    mensagemFinal.innerHTML = '<div class="mensagem-erro">❌ Por favor, informe o nome do cliente.</div>';
+                    return;
+                }
+                novoCliente = {
+                    nome: nome,
+                    cpf_cnpj: document.getElementById('cliente-cpf').value.trim() || null,
+                    telefone: document.getElementById('cliente-telefone').value.trim() || null,
+                    email: document.getElementById('cliente-email').value.trim() || null,
+                    endereco: document.getElementById('cliente-endereco').value.trim() || null,
+                    cidade: document.getElementById('cliente-cidade').value.trim() || null,
+                    estado: document.getElementById('cliente-estado').value || null
+                };
+            }
+
+            const matricula = document.getElementById('prop-matricula').value.trim();
+            if (!matricula) {
+                mensagemFinal.innerHTML = '<div class="mensagem-erro">❌ Por favor, informe a matrícula da propriedade.</div>';
+                return;
+            }
+
+            // Extrair vértices dos dados extraídos
+            const dadosData = dadosExtraidos.data || dadosExtraidos;
+            const verticesOriginais = dadosData.vertices || [];
+
+            // Preparar vértices com estrutura completa
+            const vertices = verticesOriginais.map((v, index) => ({
+                nome: v.nome,
+                ordem: index + 1,
+                coordenadas: {
+                    tipo: v.coordenadas.tipo || 'UTM',
+                    e: v.coordenadas.e,
+                    n: v.coordenadas.n,
+                    lat_original: v.coordenadas.lat_original,
+                    lon_original: v.coordenadas.lon_original,
+                    utm_zona: v.coordenadas.utm_zona || '22S',
+                    datum: v.coordenadas.datum || 'SIRGAS2000'
+                }
+            }));
+
+            // Preparar dados para envio
+            const payload = {
+                cliente: clienteId ? {
+                    novo: false,
+                    id: clienteId
+                } : {
+                    novo: true,
+                    ...novoCliente
+                },
+                propriedade: {
+                    nome_propriedade: document.getElementById('prop-nome').value.trim() || 'Sem nome',
+                    matricula: matricula,
+                    tipo: document.getElementById('prop-tipo').value,
+                    municipio: document.getElementById('prop-municipio').value.trim() || null,
+                    uf: document.getElementById('prop-uf').value.trim() || null,
+                    area_m2: parseFloat(document.getElementById('prop-area').value) || null,
+                    perimetro_m: parseFloat(document.getElementById('prop-perimetro').value) || null
+                },
+                vertices: vertices
+            };
+
+            console.log('Enviando payload:', payload);
+
+            // Desabilitar botão e mostrar loading
+            btnSalvar.disabled = true;
+            btnSalvar.innerHTML = '<span class="loading"></span> Salvando...';
+
+            try {
+                const response = await fetch('/api/salvar-memorial-completo', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+
+                    if (result.success) {
+                        const data = result.data;
+                        mensagemFinal.innerHTML = `
+                            <div class="mensagem-sucesso">
+                                ✅ <strong>${result.message || 'Memorial salvo com sucesso!'}</strong><br><br>
+                                <strong>Cliente ID:</strong> ${data.cliente_id}<br>
+                                <strong>Propriedade ID:</strong> ${data.propriedade_id}<br>
+                                <strong>Vértices criados:</strong> ${data.vertices_criados}<br><br>
+                                <a href="index.html" class="btn btn-primary">🗺️ Ver no Mapa</a>
+                                <a href="importar-memorial.html" class="btn btn-secondary">📄 Importar Outro</a>
+                            </div>
+                        `;
+
+                        // Reabilitar botão com mensagem de sucesso
+                        btnSalvar.innerHTML = '✅ Salvo com Sucesso!';
+                        btnSalvar.style.background = '#27ae60';
+
+                        // Scroll para mensagem
+                        mensagemFinal.scrollIntoView({ behavior: 'smooth' });
+                    } else {
+                        throw new Error(result.message || 'Erro ao salvar memorial');
+                    }
+
+                } else {
+                    const errorData = await response.json().catch(() => ({ message: 'Erro desconhecido' }));
+                    mensagemFinal.innerHTML = `<div class="mensagem-erro">❌ Erro ao salvar: ${errorData.message || 'Erro desconhecido'}</div>`;
+                    btnSalvar.disabled = false;
+                    btnSalvar.innerHTML = '✅ Salvar Memorial Completo';
+                }
+            } catch (error) {
+                console.error('Erro ao salvar:', error);
+                mensagemFinal.innerHTML = `<div class="mensagem-erro">❌ Erro de conexão: ${error.message}</div>`;
+                btnSalvar.disabled = false;
+                btnSalvar.innerHTML = '✅ Salvar Memorial Completo';
+            }
+        }
+
+        // Função para cancelar a importação
+        function cancelarImportacao() {
+            if (confirm('Tem certeza que deseja cancelar? Os dados extraídos serão perdidos.')) {
+                document.getElementById('formulario-confirmacao').style.display = 'none';
+                dadosExtraidos = null;
+
+                // Limpar campos do formulário
+                document.getElementById('prop-nome').value = '';
+                document.getElementById('prop-matricula').value = '';
+                document.getElementById('prop-municipio').value = '';
+                document.getElementById('prop-uf').value = '';
+                document.getElementById('prop-area').value = '';
+                document.getElementById('prop-perimetro').value = '';
+                document.getElementById('vertices-tbody').innerHTML = '';
+                document.getElementById('mensagem-final').innerHTML = '';
+
+                // Resetar para cliente existente
+                document.querySelector('input[name="tipo-cliente"][value="existente"]').checked = true;
+                document.getElementById('cliente-existente-campos').style.display = 'block';
+                document.getElementById('cliente-novo-campos').style.display = 'none';
+
+                // Limpar campos de novo cliente
+                document.getElementById('cliente-nome').value = '';
+                document.getElementById('cliente-cpf').value = '';
+                document.getElementById('cliente-telefone').value = '';
+                document.getElementById('cliente-email').value = '';
+                document.getElementById('cliente-endereco').value = '';
+                document.getElementById('cliente-cidade').value = '';
+                document.getElementById('cliente-estado').value = '';
+            }
+        }
+    </script>
+
+    <!-- Formulário de Confirmação -->
+    <div id="formulario-confirmacao">
+        <h2>📝 Confirmar Dados do Memorial</h2>
+
+        <!-- Info do Memorial -->
+        <div class="info-card" id="info-memorial">
+            <strong>✅ Extração concluída com sucesso!</strong><br>
+            <span id="info-arquivo"></span><br>
+            <span id="info-vertices"></span><br>
+            <span id="info-area"></span>
+        </div>
+
+        <!-- Seção Cliente -->
+        <h3>👤 Cliente (Proprietário)</h3>
+        <div class="radio-group">
+            <label>
+                <input type="radio" name="tipo-cliente" value="existente" checked>
+                Usar cliente existente
+            </label>
+            <label>
+                <input type="radio" name="tipo-cliente" value="novo">
+                Criar novo cliente
+            </label>
+        </div>
+
+        <div id="cliente-existente-campos">
+            <div class="form-group">
+                <label>Selecione o cliente:</label>
+                <select id="select-cliente">
+                    <option value="">Carregando clientes...</option>
+                </select>
+            </div>
+        </div>
+
+        <div id="cliente-novo-campos">
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Nome completo: *</label>
+                    <input type="text" id="cliente-nome" required>
+                </div>
+                <div class="form-group">
+                    <label>CPF/CNPJ:</label>
+                    <input type="text" id="cliente-cpf">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Telefone:</label>
+                    <input type="text" id="cliente-telefone" placeholder="(41) 99999-9999">
+                </div>
+                <div class="form-group">
+                    <label>Email:</label>
+                    <input type="email" id="cliente-email">
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Endereço:</label>
+                <input type="text" id="cliente-endereco">
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Cidade:</label>
+                    <input type="text" id="cliente-cidade">
+                </div>
+                <div class="form-group">
+                    <label>Estado:</label>
+                    <select id="cliente-estado">
+                        <option value="">Selecione...</option>
+                        <option value="AC">AC</option>
+                        <option value="AL">AL</option>
+                        <option value="AP">AP</option>
+                        <option value="AM">AM</option>
+                        <option value="BA">BA</option>
+                        <option value="CE">CE</option>
+                        <option value="DF">DF</option>
+                        <option value="ES">ES</option>
+                        <option value="GO">GO</option>
+                        <option value="MA">MA</option>
+                        <option value="MT">MT</option>
+                        <option value="MS">MS</option>
+                        <option value="MG">MG</option>
+                        <option value="PA">PA</option>
+                        <option value="PB">PB</option>
+                        <option value="PR" selected>PR</option>
+                        <option value="PE">PE</option>
+                        <option value="PI">PI</option>
+                        <option value="RJ">RJ</option>
+                        <option value="RN">RN</option>
+                        <option value="RS">RS</option>
+                        <option value="RO">RO</option>
+                        <option value="RR">RR</option>
+                        <option value="SC">SC</option>
+                        <option value="SP">SP</option>
+                        <option value="SE">SE</option>
+                        <option value="TO">TO</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- Seção Propriedade -->
+        <h3>🏘️ Propriedade</h3>
+        <div class="form-row">
+            <div class="form-group">
+                <label>Nome da propriedade:</label>
+                <input type="text" id="prop-nome" placeholder="Ex: Fazenda Santa Maria">
+            </div>
+            <div class="form-group">
+                <label>Matrícula: *</label>
+                <input type="text" id="prop-matricula" required>
+            </div>
+        </div>
+        <div class="form-row-3">
+            <div class="form-group">
+                <label>Município:</label>
+                <input type="text" id="prop-municipio">
+            </div>
+            <div class="form-group">
+                <label>Tipo:</label>
+                <select id="prop-tipo">
+                    <option value="RURAL">Rural</option>
+                    <option value="URBANO">Urbano</option>
+                    <option value="LOTEAMENTO">Loteamento</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>UF:</label>
+                <input type="text" id="prop-uf" maxlength="2" placeholder="PR">
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label>Área (m²):</label>
+                <input type="number" id="prop-area" step="0.01" readonly>
+            </div>
+            <div class="form-group">
+                <label>Perímetro (m):</label>
+                <input type="number" id="prop-perimetro" step="0.01" readonly>
+            </div>
+        </div>
+
+        <!-- Seção Vértices -->
+        <h3>📍 Vértices Extraídos</h3>
+        <div id="vertices-container">
+            <table class="vertices-tabela">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Nome</th>
+                        <th>UTM E</th>
+                        <th>UTM N</th>
+                        <th>Latitude</th>
+                        <th>Longitude</th>
+                    </tr>
+                </thead>
+                <tbody id="vertices-tbody">
+                    <!-- Vértices serão inseridos aqui via JS -->
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Botões -->
+        <div class="botoes-confirmacao">
+            <button class="btn btn-primary" id="btn-salvar" onclick="salvarMemorialCompleto()">
+                ✅ Salvar Memorial Completo
+            </button>
+            <button class="btn btn-secondary" onclick="cancelarImportacao()">
+                ❌ Cancelar
+            </button>
+        </div>
+
+        <div id="mensagem-final"></div>
+    </div>
+
+</body>
+</html>

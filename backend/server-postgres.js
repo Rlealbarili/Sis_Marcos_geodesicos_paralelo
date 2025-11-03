@@ -1,12 +1,16 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const multer = require('multer');
+const fs = require('fs');
 require('dotenv').config({ path: './backend/.env', override: true });
 const { query, transaction, healthCheck, pool } = require('./database/postgres-connection');
 const SIGEFDownloader = require('./sigef-downloader');
 const SpatialAnalyzer = require('./spatial-analyzer');
 const ReportGenerator = require('./report-generator');
 const DataExporter = require('./data-exporter');
+const UnstructuredProcessor = require('./unstructured-processor');
+const axios = require('axios');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -15,6 +19,12 @@ const PORT = process.env.PORT || 3001;
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '../frontend')));
+
+// Configuração Multer para upload de arquivos
+const upload = multer({
+    dest: path.join(__dirname, '../uploads/'),
+    limits: { fileSize: 10 * 1024 * 1024 } // 10MB max
+});
 
 // Logging
 app.use((req, res, next) => {
@@ -1805,6 +1815,127 @@ app.get('/api/dashboard/top-propriedades', async (req, res) => {
 });
 
 console.log('✅ Rotas de dashboard carregadas');
+
+// =====================================================
+// ROTA: UPLOAD DE MEMORIAL DESCRITIVO (.DOCX)
+// =====================================================
+
+app.post('/api/memorial/upload', upload.single('memorial'), async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({
+                sucesso: false,
+                erro: 'Nenhum arquivo foi enviado'
+            });
+        }
+
+        console.log('📄 Memorial recebido:', req.file.originalname);
+        console.log('📍 Tamanho:', req.file.size, 'bytes');
+        console.log('📦 Tipo:', req.file.mimetype);
+
+        // Verificar extensão
+        const fileName = req.file.originalname.toLowerCase();
+        if (!fileName.endsWith('.docx') && !fileName.endsWith('.doc')) {
+            fs.unlinkSync(req.file.path);
+            return res.status(400).json({
+                sucesso: false,
+                erro: 'Apenas arquivos .doc ou .docx são permitidos'
+            });
+        }
+
+        // PROCESSAMENTO REAL COM UNSTRUCTURED API
+        console.log('🔄 Enviando para API Unstructured...');
+
+        const FormData = require('form-data');
+        const formData = new FormData();
+        formData.append('files', fs.createReadStream(req.file.path), {
+            filename: req.file.originalname,
+            contentType: req.file.mimetype
+        });
+
+        let unstructuredResponse;
+        try {
+            unstructuredResponse = await axios.post(
+                'http://localhost:8000/general/v0/general',
+                formData,
+                {
+                    headers: formData.getHeaders(),
+                    timeout: 30000
+                }
+            );
+            console.log(`✅ API Unstructured retornou ${unstructuredResponse.data.length} elementos`);
+        } catch (apiError) {
+            console.error('❌ Erro na API Unstructured:', apiError.message);
+            fs.unlinkSync(req.file.path);
+
+            if (apiError.code === 'ECONNREFUSED') {
+                return res.status(503).json({
+                    sucesso: false,
+                    erro: 'API Unstructured não está disponível. Certifique-se de que o serviço Docker está rodando em http://localhost:8000'
+                });
+            }
+
+            return res.status(500).json({
+                sucesso: false,
+                erro: 'Erro ao processar documento: ' + apiError.message
+            });
+        }
+
+        // Processar resposta com UnstructuredProcessor
+        console.log('🔄 Processando elementos extraídos...');
+        const processor = new UnstructuredProcessor();
+        const resultado = processor.processUnstructuredResponse(unstructuredResponse.data);
+
+        console.log(`✅ Processamento concluído: ${resultado.vertices.length} vértices extraídos`);
+
+        // Formatar resposta para o frontend
+        const resposta = {
+            sucesso: true,
+            total_marcos: resultado.vertices.length,
+            area_m2: resultado.metadata.area || null,
+            perimetro_m: resultado.metadata.perimetro || null,
+            vertices: resultado.vertices,
+            metadata: resultado.metadata,
+            propriedade: {
+                nome: resultado.metadata.imovel || 'Sem nome',
+                municipio: resultado.metadata.municipio || null,
+                uf: resultado.metadata.uf || null,
+                matricula: resultado.metadata.matricula || null,
+                comarca: resultado.metadata.comarca || null
+            },
+            cliente: {
+                nome: Array.isArray(resultado.metadata.proprietarios) && resultado.metadata.proprietarios.length > 0
+                    ? resultado.metadata.proprietarios[0]
+                    : 'Sem nome'
+            },
+            estatisticas: resultado.estatisticas
+        };
+
+        // Limpar arquivo temporário
+        fs.unlinkSync(req.file.path);
+
+        console.log('✅ Memorial processado com sucesso');
+
+        res.json(resposta);
+
+    } catch (error) {
+        console.error('❌ Erro ao processar memorial:', error);
+
+        // Limpar arquivo em caso de erro
+        if (req.file && req.file.path) {
+            try {
+                fs.unlinkSync(req.file.path);
+            } catch (e) {}
+        }
+
+        res.status(500).json({
+            sucesso: false,
+            erro: error.message
+        });
+    }
+});
+
+console.log('✅ Rota /api/memorial/upload carregada');
 
 // =====================================================
 // MÓDULOS CAR

@@ -406,9 +406,9 @@
 
                             <select id="filtro-tipo" class="input" style="width: 150px;">
                                 <option value="todos">Todos os Tipos</option>
-                                <option value="V">Vértice</option>
-                                <option value="M">RN</option>
-                                <option value="P">Auxiliar</option>
+                                <option value="V">V - Vértice (Divisa)</option>
+                                <option value="M">M - Marco de Referência</option>
+                                <option value="P">P - Ponto Auxiliar</option>
                             </select>
 
                             <select id="filtro-status" class="input" style="width: 150px;">
@@ -1569,13 +1569,13 @@
                         <div class="form-group">
                             <label class="form-label">
                                 Tipo de Marco *
-                                <span class="form-hint">Vértice, RN ou Auxiliar</span>
+                                <span class="form-hint">COGEP: V (Vértice), M (Marco), P (Ponto Auxiliar)</span>
                             </label>
                             <select name="tipo" class="input" required>
                                 <option value="">Selecione o tipo</option>
-                                <option value="V">Vértice</option>
-                                <option value="M">Referência de Nível (RN)</option>
-                                <option value="P">Ponto Auxiliar</option>
+                                <option value="V">V - Vértice (Divisa)</option>
+                                <option value="M">M - Marco de Referência</option>
+                                <option value="P">P - Ponto Auxiliar</option>
                             </select>
                         </div>
 
@@ -3340,17 +3340,50 @@
         // Reinicializar ícones
         lucide.createIcons();
 
-        // Processar arquivo DOCX
-        mostrarToast('info', 'Processando arquivo', 'Analisando memorial descritivo...');
+        // Processar arquivo DOCX - UPLOAD REAL
+        mostrarToast('info', 'Processando arquivo', 'Enviando memorial descritivo...');
 
-        // TODO: Implementar extração de DOCX
-        // Por enquanto, sugerir uso de CSV/Excel
-        setTimeout(() => {
-            mostrarToast('warning', 'Use CSV ou Excel', 'Para importar dados, utilize os formatos CSV ou Excel que são totalmente suportados.');
-            setTimeout(() => {
-                cancelarImportacaoDOCX();
-            }, 3000);
-        }, 2000);
+        try {
+            const formData = new FormData();
+            formData.append('memorial', arquivo);
+
+            const response = await fetch('http://localhost:3001/api/memorial/upload', {
+                method: 'POST',
+                body: formData
+            });
+
+            const resultado = await response.json();
+
+            if (resultado.sucesso) {
+                mostrarToast('success', 'Memorial processado!',
+                    `${resultado.total_marcos} marcos extraídos • ${(resultado.area_m2/10000).toFixed(2)} ha`);
+
+                // Mostrar resultado detalhado
+                setTimeout(() => {
+                    alert(`✅ MEMORIAL PROCESSADO COM SUCESSO!\n\n` +
+                        `📊 Marcos extraídos: ${resultado.total_marcos}\n` +
+                        `📐 Área: ${(resultado.area_m2/10000).toFixed(2)} hectares\n` +
+                        `📏 Perímetro: ${resultado.perimetro_m.toFixed(2)} metros\n\n` +
+                        `🏠 Propriedade: ${resultado.propriedade.nome}\n` +
+                        `👤 Cliente: ${resultado.cliente.nome}\n` +
+                        `📍 ${resultado.propriedade.municipio}/${resultado.propriedade.uf}`);
+
+                    // Recarregar dados
+                    cancelarImportacaoDOCX();
+                    if (typeof recarregarPropriedades === 'function') {
+                        recarregarPropriedades();
+                    }
+                }, 500);
+            } else {
+                mostrarToast('error', 'Erro ao processar', resultado.erro);
+                setTimeout(() => cancelarImportacaoDOCX(), 2000);
+            }
+
+        } catch (error) {
+            console.error('❌ Erro no upload:', error);
+            mostrarToast('error', 'Erro no upload', error.message);
+            setTimeout(() => cancelarImportacaoDOCX(), 2000);
+        }
     }
 
     function cancelarImportacaoDOCX() {
@@ -4149,10 +4182,10 @@
     function atualizarEstatisticasPropriedades() {
         const total = PropriedadesState.propriedades.length;
 
-        // Atualizar card de estatísticas no dashboard (se existir)
-        const statsCards = document.querySelectorAll('.stat-value');
-        if (statsCards[2]) {
-            statsCards[2].textContent = total;
+        // Atualizar card de estatísticas no dashboard (mantendo o ícone)
+        const statPropriedades = document.getElementById('stat-propriedades');
+        if (statPropriedades) {
+            statPropriedades.textContent = total;
         }
     }
 
@@ -5433,9 +5466,9 @@
                             <div>
                                 <label style="display: block; font-weight: var(--weight-semibold); margin-bottom: var(--space-2);">Tipo *</label>
                                 <select id="marco-tipo" required style="width: 100%; padding: var(--space-3); border: 1px solid var(--border-primary); border-radius: var(--radius-md);">
-                                    <option value="M">Marco (M)</option>
-                                    <option value="V">Vértice (V)</option>
-                                    <option value="P">Ponto (P)</option>
+                                    <option value="V">V - Vértice (Divisa)</option>
+                                    <option value="M">M - Marco de Referência</option>
+                                    <option value="P">P - Ponto Auxiliar</option>
                                 </select>
                             </div>
                             <div>
