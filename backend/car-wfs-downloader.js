@@ -1,10 +1,18 @@
 const fetch = require('node-fetch');
+const https = require('https');
 
 class CARWFSDownloader {
     constructor(pool) {
         this.pool = pool;
         this.wfsBaseUrl = 'https://geoserver.car.gov.br/geoserver/wfs';
         this.maxFeaturesPerRequest = 10000;
+
+        // Agente HTTPS que aceita certificados SSL do gov.br
+        // Necessário porque o certificado do geoserver.car.gov.br
+        // pode ter problemas na cadeia de certificados
+        this.httpsAgent = new https.Agent({
+            rejectUnauthorized: false // Aceita certificados SSL com problemas
+        });
     }
 
     /**
@@ -71,7 +79,10 @@ class CARWFSDownloader {
                 console.log(`📥 Buscando registros ${startIndex} - ${startIndex + this.maxFeaturesPerRequest}...`);
 
                 // Fazer requisição WFS
-                const response = await fetch(url, { timeout: 30000 });
+                const response = await fetch(url, {
+                    timeout: 30000,
+                    agent: this.httpsAgent
+                });
 
                 if (!response.ok) {
                     throw new Error(`Erro WFS: ${response.status} ${response.statusText}`);
@@ -231,7 +242,10 @@ class CARWFSDownloader {
         const url = `${this.wfsBaseUrl}?service=WFS&version=2.0.0&request=GetFeature&typeNames=sicar:imoveis&outputFormat=application/json&CQL_FILTER=estado='${estado}'&count=1000&propertyName=municipio`;
 
         try {
-            const response = await fetch(url, { timeout: 15000 });
+            const response = await fetch(url, {
+                timeout: 15000,
+                agent: this.httpsAgent
+            });
 
             if (!response.ok) {
                 throw new Error(`Erro WFS: ${response.status}`);
@@ -261,7 +275,10 @@ class CARWFSDownloader {
 
         try {
             const url = `${this.wfsBaseUrl}?service=WFS&version=2.0.0&request=GetCapabilities`;
-            const response = await fetch(url, { timeout: 10000 });
+            const response = await fetch(url, {
+                timeout: 10000,
+                agent: this.httpsAgent
+            });
 
             if (response.ok) {
                 console.log('   ✅ Conexão WFS OK!');

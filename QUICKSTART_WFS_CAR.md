@@ -58,10 +58,26 @@ http://localhost:3001/car-download-auto.html
 1. Clique no botão **"Testar Conexão WFS"**
 2. Deve aparecer: ✅ **Conexão OK!**
 
-Se aparecer erro de conexão:
+#### ⚠️ Erro SSL Corrigido
+
+Se você encontrou o erro:
+```
+❌ unable to verify the first certificate
+```
+
+✅ **Este problema já foi corrigido!**
+
+O sistema agora inclui um agente HTTPS customizado que aceita certificados SSL do gov.br.
+
+**Detalhes da correção**: Veja `CORRECAO_SSL_WFS.md`
+
+#### Outros problemas de conexão:
+
+Se aparecer outro erro:
 - Verifique se tem internet
 - O servidor WFS do CAR pode estar temporariamente offline
 - Tente novamente em alguns minutos
+- Verifique firewall/antivirus
 
 ---
 
