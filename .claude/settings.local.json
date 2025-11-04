@@ -53,7 +53,8 @@
       "Bash(cmd /c \"ping 127.0.0.1 -n 3 > nul\")",
       "Bash(cmd /c \"ping 127.0.0.1 -n 5 > nul\")",
       "Bash(cmd /c \"taskkill /F /PID 27200\")",
-      "mcp__playwright__browser_file_upload"
+      "mcp__playwright__browser_file_upload",
+      "Bash(cmd /c \"dir frontend\\script-poligonos.js /b\")"
     ],
     "deny": [],
     "ask": []

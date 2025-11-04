@@ -861,6 +861,7 @@
 
     <!-- SCRIPTS -->
     <script src="script.js"></script>
+    <script src="script-poligonos.js"></script>
     <script>
         // Inicializar Lucide Icons
         lucide.createIcons();
@@ -3314,6 +3315,9 @@
         }
     }
 
+    // Estado global do memorial sendo processado
+    let memorialAtual = null;
+
     async function processarArquivoDOCX(arquivo) {
         console.log('📄 Processando memorial DOCX:', arquivo.name);
 
@@ -3358,21 +3362,12 @@
                 mostrarToast('success', 'Memorial processado!',
                     `${resultado.total_marcos} marcos extraídos • ${(resultado.area_m2/10000).toFixed(2)} ha`);
 
-                // Mostrar resultado detalhado
-                setTimeout(() => {
-                    alert(`✅ MEMORIAL PROCESSADO COM SUCESSO!\n\n` +
-                        `📊 Marcos extraídos: ${resultado.total_marcos}\n` +
-                        `📐 Área: ${(resultado.area_m2/10000).toFixed(2)} hectares\n` +
-                        `📏 Perímetro: ${resultado.perimetro_m.toFixed(2)} metros\n\n` +
-                        `🏠 Propriedade: ${resultado.propriedade.nome}\n` +
-                        `👤 Cliente: ${resultado.cliente.nome}\n` +
-                        `📍 ${resultado.propriedade.municipio}/${resultado.propriedade.uf}`);
+                // Salvar resultado globalmente
+                memorialAtual = resultado;
 
-                    // Recarregar dados
-                    cancelarImportacaoDOCX();
-                    if (typeof recarregarPropriedades === 'function') {
-                        recarregarPropriedades();
-                    }
+                // Mostrar formulário de confirmação
+                setTimeout(() => {
+                    mostrarFormularioConfirmacaoMemorial(resultado);
                 }, 500);
             } else {
                 mostrarToast('error', 'Erro ao processar', resultado.erro);
@@ -3384,6 +3379,264 @@
             mostrarToast('error', 'Erro no upload', error.message);
             setTimeout(() => cancelarImportacaoDOCX(), 2000);
         }
+    }
+
+    async function mostrarFormularioConfirmacaoMemorial(resultado) {
+        // Criar modal dinâmico
+        const modalHTML = `
+            <div id="modal-confirmacao-memorial" class="modal-overlay" style="display: flex;">
+                <div class="modal-container" style="max-width: 900px; max-height: 90vh; overflow-y: auto;">
+                    <div class="modal-header">
+                        <h2>Confirmar Memorial Descritivo</h2>
+                        <button class="modal-close" onclick="fecharModalConfirmacaoMemorial()">
+                            <i data-lucide="x"></i>
+                        </button>
+                    </div>
+
+                    <div class="modal-body" style="padding: var(--space-6);">
+                        <!-- Resumo -->
+                        <div style="background: var(--bg-secondary); padding: var(--space-4); border-radius: var(--radius-lg); margin-bottom: var(--space-6);">
+                            <h3 style="margin-bottom: var(--space-2);">📊 Resumo da Extração</h3>
+                            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-4);">
+                                <div>
+                                    <strong>Vértices:</strong> ${resultado.total_marcos}
+                                </div>
+                                <div>
+                                    <strong>Área:</strong> ${(resultado.area_m2/10000).toFixed(2)} ha
+                                </div>
+                                <div>
+                                    <strong>Perímetro:</strong> ${resultado.perimetro_m ? resultado.perimetro_m.toFixed(2) + ' m' : 'N/A'}
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Cliente -->
+                        <div style="margin-bottom: var(--space-6);">
+                            <h3 style="margin-bottom: var(--space-3);">👤 Cliente</h3>
+                            <div style="margin-bottom: var(--space-3);">
+                                <label>
+                                    <input type="radio" name="tipo-cliente" value="novo" checked onchange="toggleClienteFields()"> Novo Cliente
+                                </label>
+                                <label style="margin-left: var(--space-4);">
+                                    <input type="radio" name="tipo-cliente" value="existente" onchange="toggleClienteFields()"> Cliente Existente
+                                </label>
+                            </div>
+
+                            <div id="campos-novo-cliente">
+                                <div class="input-group">
+                                    <label>Nome do Cliente *</label>
+                                    <input type="text" id="memorial-cliente-nome" class="input" value="${resultado.cliente.nome || ''}" required>
+                                </div>
+                            </div>
+
+                            <div id="campos-cliente-existente" style="display: none;">
+                                <div class="input-group">
+                                    <label>Selecionar Cliente *</label>
+                                    <select id="memorial-cliente-id" class="input"></select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Propriedade -->
+                        <div style="margin-bottom: var(--space-6);">
+                            <h3 style="margin-bottom: var(--space-3);">🏠 Propriedade</h3>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4);">
+                                <div class="input-group">
+                                    <label>Nome da Propriedade *</label>
+                                    <input type="text" id="memorial-prop-nome" class="input" value="${resultado.propriedade.nome || ''}" required>
+                                </div>
+                                <div class="input-group">
+                                    <label>Matrícula</label>
+                                    <input type="text" id="memorial-prop-matricula" class="input" value="${resultado.propriedade.matricula || ''}">
+                                </div>
+                                <div class="input-group">
+                                    <label>Tipo *</label>
+                                    <select id="memorial-prop-tipo" class="input">
+                                        <option value="RURAL" selected>RURAL</option>
+                                        <option value="URBANA">URBANA</option>
+                                        <option value="INDUSTRIAL">INDUSTRIAL</option>
+                                        <option value="COMERCIAL">COMERCIAL</option>
+                                    </select>
+                                </div>
+                                <div class="input-group">
+                                    <label>Município</label>
+                                    <input type="text" id="memorial-prop-municipio" class="input" value="${resultado.propriedade.municipio || ''}">
+                                </div>
+                                <div class="input-group">
+                                    <label>UF</label>
+                                    <input type="text" id="memorial-prop-uf" class="input" value="${resultado.propriedade.uf || 'PR'}" maxlength="2">
+                                </div>
+                                <div class="input-group">
+                                    <label>Comarca</label>
+                                    <input type="text" id="memorial-prop-comarca" class="input" value="${resultado.propriedade.comarca || ''}">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Vértices -->
+                        <div>
+                            <h3 style="margin-bottom: var(--space-3);">📍 Vértices (${resultado.vertices.length})</h3>
+                            <div style="max-height: 300px; overflow-y: auto; border: 1px solid var(--border-primary); border-radius: var(--radius-md);">
+                                <table style="width: 100%; border-collapse: collapse;">
+                                    <thead style="position: sticky; top: 0; background: var(--bg-secondary);">
+                                        <tr>
+                                            <th style="padding: var(--space-2); text-align: left;">#</th>
+                                            <th style="padding: var(--space-2); text-align: left;">Nome</th>
+                                            <th style="padding: var(--space-2); text-align: right;">UTM E</th>
+                                            <th style="padding: var(--space-2); text-align: right;">UTM N</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${resultado.vertices.map((v, i) => `
+                                            <tr style="border-top: 1px solid var(--border-primary);">
+                                                <td style="padding: var(--space-2);">${i + 1}</td>
+                                                <td style="padding: var(--space-2);">${v.nome}</td>
+                                                <td style="padding: var(--space-2); text-align: right;">${v.coordenadas.e.toFixed(2)}</td>
+                                                <td style="padding: var(--space-2); text-align: right;">${v.coordenadas.n.toFixed(2)}</td>
+                                            </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="modal-footer">
+                        <button class="btn btn-secondary" onclick="fecharModalConfirmacaoMemorial()">
+                            <i data-lucide="x"></i>
+                            Cancelar
+                        </button>
+                        <button class="btn btn-primary" onclick="salvarMemorialCompleto()">
+                            <i data-lucide="save"></i>
+                            Salvar Memorial
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        // Adicionar modal ao DOM
+        document.body.insertAdjacentHTML('beforeend', modalHTML);
+
+        // Carregar clientes existentes
+        await carregarClientesParaSelect();
+
+        // Reinicializar ícones
+        lucide.createIcons();
+    }
+
+    async function carregarClientesParaSelect() {
+        try {
+            const response = await fetch('http://localhost:3001/api/clientes');
+            const result = await response.json();
+
+            const select = document.getElementById('memorial-cliente-id');
+            if (select && result.data) {
+                select.innerHTML = '<option value="">Selecione um cliente</option>' +
+                    result.data.map(c => `<option value="${c.id}">${c.nome}</option>`).join('');
+            }
+        } catch (error) {
+            console.error('Erro ao carregar clientes:', error);
+        }
+    }
+
+    function toggleClienteFields() {
+        const tipo = document.querySelector('input[name="tipo-cliente"]:checked').value;
+        document.getElementById('campos-novo-cliente').style.display = tipo === 'novo' ? 'block' : 'none';
+        document.getElementById('campos-cliente-existente').style.display = tipo === 'existente' ? 'block' : 'none';
+    }
+
+    async function salvarMemorialCompleto() {
+        try {
+            // Validar campos
+            const tipoCliente = document.querySelector('input[name="tipo-cliente"]:checked').value;
+
+            let clienteData;
+            if (tipoCliente === 'novo') {
+                const nomeCliente = document.getElementById('memorial-cliente-nome').value.trim();
+                if (!nomeCliente) {
+                    mostrarToast('error', 'Erro', 'Nome do cliente é obrigatório');
+                    return;
+                }
+                clienteData = { novo: true, nome: nomeCliente };
+            } else {
+                const clienteId = parseInt(document.getElementById('memorial-cliente-id').value);
+                if (!clienteId) {
+                    mostrarToast('error', 'Erro', 'Selecione um cliente');
+                    return;
+                }
+                clienteData = { novo: false, id: clienteId };
+            }
+
+            const nomeProp = document.getElementById('memorial-prop-nome').value.trim();
+            if (!nomeProp) {
+                mostrarToast('error', 'Erro', 'Nome da propriedade é obrigatório');
+                return;
+            }
+
+            // Montar payload
+            const payload = {
+                cliente: clienteData,
+                propriedade: {
+                    nome_propriedade: nomeProp,
+                    matricula: document.getElementById('memorial-prop-matricula').value.trim() || null,
+                    tipo: document.getElementById('memorial-prop-tipo').value,
+                    municipio: document.getElementById('memorial-prop-municipio').value.trim() || null,
+                    comarca: document.getElementById('memorial-prop-comarca').value.trim() || null,
+                    uf: document.getElementById('memorial-prop-uf').value.trim() || null,
+                    area_m2: memorialAtual.area_m2 || null,
+                    perimetro_m: memorialAtual.perimetro_m || null
+                },
+                vertices: memorialAtual.vertices
+            };
+
+            console.log('📤 Enviando memorial completo:', payload);
+
+            mostrarToast('info', 'Salvando', 'Salvando memorial no banco de dados...');
+
+            const response = await fetch('http://localhost:3001/api/salvar-memorial-completo', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                mostrarToast('success', 'Sucesso!',
+                    `Memorial salvo! Propriedade ID: ${result.data.propriedade_id}`);
+
+                // Fechar modal
+                fecharModalConfirmacaoMemorial();
+
+                // Cancelar upload
+                cancelarImportacaoDOCX();
+
+                // Recarregar propriedades no mapa
+                setTimeout(async () => {
+                    if (typeof recarregarPropriedades === 'function') {
+                        await recarregarPropriedades();
+                    }
+                    // Carregar e exibir polígonos
+                    await carregarPropriedadesNoMapa();
+                }, 500);
+
+            } else {
+                mostrarToast('error', 'Erro ao salvar', result.message || 'Erro desconhecido');
+            }
+
+        } catch (error) {
+            console.error('❌ Erro ao salvar memorial:', error);
+            mostrarToast('error', 'Erro', error.message);
+        }
+    }
+
+    function fecharModalConfirmacaoMemorial() {
+        const modal = document.getElementById('modal-confirmacao-memorial');
+        if (modal) {
+            modal.remove();
+        }
+        memorialAtual = null;
     }
 
     function cancelarImportacaoDOCX() {

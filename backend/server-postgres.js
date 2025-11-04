@@ -11,6 +11,19 @@ const ReportGenerator = require('./report-generator');
 const DataExporter = require('./data-exporter');
 const UnstructuredProcessor = require('./unstructured-processor');
 const axios = require('axios');
+const proj4 = require('proj4');
+
+// ============================================
+// CONFIGURAÇÃO DE SISTEMAS DE COORDENADAS
+// ============================================
+
+// SIRGAS 2000 UTM Zone 22S (EPSG:31982) - Paraná/Sul do Brasil
+proj4.defs('EPSG:31982', '+proj=utm +zone=22 +south +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs');
+
+// WGS84 (GPS/Leaflet) - EPSG:4326
+proj4.defs('EPSG:4326', '+proj=longlat +datum=WGS84 +no_defs');
+
+console.log('✅ Sistemas de coordenadas configurados (EPSG:31982 → EPSG:4326)');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -457,6 +470,74 @@ const clientesRoutes = require('./routes/clientes');
 app.use('/api/clientes', clientesRoutes);
 console.log('✅ Rotas de clientes carregadas: /api/clientes');
 
+// ============================================
+// ENDPOINT: Propriedades em GeoJSON (DEVE VIR ANTES DAS ROTAS DINÂMICAS)
+// ============================================
+
+app.get('/api/propriedades/geojson', async (req, res) => {
+    try {
+        console.log('[GeoJSON] Buscando propriedades...');
+
+        const result = await query(`
+            SELECT
+                p.id,
+                p.nome_propriedade,
+                p.matricula,
+                p.tipo,
+                p.municipio,
+                p.uf,
+                p.area_m2,
+                p.area_calculada,
+                p.perimetro_m,
+                p.perimetro_calculado,
+                c.nome as cliente_nome,
+                ST_AsGeoJSON(ST_Transform(p.geometry, 4326)) as geometry
+            FROM propriedades p
+            LEFT JOIN clientes c ON p.cliente_id = c.id
+            WHERE p.geometry IS NOT NULL
+            AND p.ativo = true
+            ORDER BY p.created_at DESC
+        `);
+
+        console.log(`[GeoJSON] ${result.rows.length} propriedades encontradas`);
+
+        const geojson = {
+            type: 'FeatureCollection',
+            features: result.rows.map(row => {
+                const geometry = JSON.parse(row.geometry);
+                console.log(`[GeoJSON] Propriedade ${row.id}: ${row.nome_propriedade}`);
+                console.log(`[GeoJSON]   Geometry type: ${geometry.type}`);
+                console.log(`[GeoJSON]   Coords (primeiros): ${JSON.stringify(geometry.coordinates[0].slice(0, 2))}`);
+
+                return {
+                    type: 'Feature',
+                    properties: {
+                        id: row.id,
+                        nome_propriedade: row.nome_propriedade,
+                        matricula: row.matricula,
+                        tipo: row.tipo,
+                        municipio: row.municipio,
+                        uf: row.uf,
+                        area_m2: parseFloat(row.area_m2) || 0,
+                        area_calculada: parseFloat(row.area_calculada) || 0,
+                        perimetro_m: parseFloat(row.perimetro_m) || 0,
+                        perimetro_calculado: parseFloat(row.perimetro_calculado) || 0,
+                        cliente_nome: row.cliente_nome
+                    },
+                    geometry: geometry
+                };
+            })
+        };
+
+        res.json(geojson);
+    } catch (error) {
+        console.error('[GeoJSON] Erro:', error.message);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+console.log('✅ Rota /api/propriedades/geojson carregada');
+
 // Rotas de Propriedades
 const propriedadesRoutes = require('./routes/propriedades');
 app.use('/api/propriedades', propriedadesRoutes);
@@ -478,12 +559,8 @@ app.post('/api/salvar-memorial-completo', async (req, res) => {
             });
         }
 
-        if (!propriedade.matricula) {
-            return res.status(400).json({
-                success: false,
-                message: 'Matrícula da propriedade é obrigatória.'
-            });
-        }
+        // Matrícula NÃO é obrigatória - propriedades em processo de regularização podem não ter
+        // A matrícula será obtida futuramente via SIGEF quando disponível
 
         console.log('[Salvar Memorial] Iniciando salvamento...');
         console.log(`[Salvar Memorial] Cliente: ${cliente.novo ? 'Novo' : `ID ${cliente.id}`}`);
@@ -496,8 +573,8 @@ app.post('/api/salvar-memorial-completo', async (req, res) => {
             if (cliente.novo) {
                 console.log('[Salvar Memorial] Criando novo cliente...');
                 const clienteResult = await client.query(
-                    `INSERT INTO clientes (nome, tipo_pessoa, cpf_cnpj, email, telefone, endereco, cidade, estado)
-                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                    `INSERT INTO clientes (nome, tipo_pessoa, cpf_cnpj, email, telefone, endereco)
+                     VALUES ($1, $2, $3, $4, $5, $6)
                      RETURNING id`,
                     [
                         cliente.nome,
@@ -505,9 +582,7 @@ app.post('/api/salvar-memorial-completo', async (req, res) => {
                         cliente.cpf_cnpj || null,
                         cliente.email || null,
                         cliente.telefone || null,
-                        cliente.endereco || null,
-                        cliente.cidade || null,
-                        cliente.estado || null
+                        cliente.endereco || null
                     ]
                 );
                 clienteId = clienteResult.rows[0].id;
@@ -631,67 +706,6 @@ app.post('/api/salvar-memorial-completo', async (req, res) => {
 });
 
 console.log('✅ Rota /api/salvar-memorial-completo carregada');
-
-// ============================================
-// ENDPOINT: Propriedades em GeoJSON
-// ============================================
-
-app.get('/api/propriedades/geojson', async (req, res) => {
-    try {
-        console.log('[GeoJSON] Buscando propriedades...');
-
-        const result = await query(`
-            SELECT
-                p.id,
-                p.nome_propriedade,
-                p.matricula,
-                p.tipo,
-                p.municipio,
-                p.uf,
-                p.area_m2,
-                p.area_calculada,
-                p.perimetro_m,
-                p.perimetro_calculado,
-                c.nome as cliente_nome,
-                ST_AsGeoJSON(p.geometry) as geometry
-            FROM propriedades p
-            LEFT JOIN clientes c ON p.cliente_id = c.id
-            WHERE p.geometry IS NOT NULL
-            AND p.ativo = true
-            ORDER BY p.created_at DESC
-        `);
-
-        console.log(`[GeoJSON] ${result.rows.length} propriedades encontradas`);
-
-        const geojson = {
-            type: 'FeatureCollection',
-            features: result.rows.map(row => ({
-                type: 'Feature',
-                properties: {
-                    id: row.id,
-                    nome: row.nome_propriedade,
-                    matricula: row.matricula,
-                    tipo: row.tipo,
-                    municipio: row.municipio,
-                    uf: row.uf,
-                    area_m2: parseFloat(row.area_m2) || 0,
-                    area_calculada: parseFloat(row.area_calculada) || 0,
-                    perimetro_m: parseFloat(row.perimetro_m) || 0,
-                    perimetro_calculado: parseFloat(row.perimetro_calculado) || 0,
-                    cliente: row.cliente_nome
-                },
-                geometry: JSON.parse(row.geometry)
-            }))
-        };
-
-        res.json(geojson);
-    } catch (error) {
-        console.error('[GeoJSON] Erro:', error.message);
-        res.status(500).json({ error: error.message });
-    }
-});
-
-console.log('✅ Rota /api/propriedades/geojson carregada');
 
 // ============================================
 // ROTAS SIGEF/INCRA

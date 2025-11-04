@@ -36,6 +36,9 @@
   "author": "COGEP",
   "license": "ISC",
   "dependencies": {
+    "@turf/area": "^7.2.0",
+    "@turf/bbox": "^7.2.0",
+    "@turf/center": "^7.2.0",
     "@turf/turf": "^7.2.0",
     "adm-zip": "^0.5.16",
     "axios": "^1.12.2",
