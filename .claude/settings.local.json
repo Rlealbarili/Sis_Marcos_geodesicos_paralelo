@@ -54,7 +54,16 @@
       "Bash(cmd /c \"ping 127.0.0.1 -n 5 > nul\")",
       "Bash(cmd /c \"taskkill /F /PID 27200\")",
       "mcp__playwright__browser_file_upload",
-      "Bash(cmd /c \"dir frontend\\script-poligonos.js /b\")"
+      "Bash(cmd /c \"dir frontend\\script-poligonos.js /b\")",
+      "WebFetch(domain:acesso.gov.br)",
+      "WebSearch",
+      "Bash(cmd /c \"for /f \"tokens=5\" %a in (''''netstat -ano ^| findstr :3001'''') do @echo %a\")",
+      "Bash(cmd /c \"taskkill /F /PID 27292\")",
+      "Bash(cmd /c \"ping 127.0.0.1 -n 4 > nul\")",
+      "Bash(cmd /c \"for /f \"tokens=5\" %a in (''''netstat -ano ^| findstr :3001'''') do taskkill /F /PID %a\")",
+      "Bash(cmd /c \"ping 127.0.0.1 -n 7 > nul\")",
+      "Bash(cmd /c \"for /f \"\"tokens=5\"\" %a in (''''netstat -ano ^| findstr LISTENING ^| findstr 3001'''') do taskkill /F /PID %a 2>nul\")",
+      "Bash(cmd /c \"ping 127.0.0.1 -n 8 > nul\")"
     ],
     "deny": [],
     "ask": []

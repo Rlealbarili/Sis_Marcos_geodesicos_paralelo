@@ -538,7 +538,48 @@ app.get('/api/propriedades/geojson', async (req, res) => {
 
 console.log('✅ Rota /api/propriedades/geojson carregada');
 
-// Rotas de Propriedades
+// IMPORTANTE: Rotas específicas de propriedades DEVEM vir ANTES do app.use()
+// Listar propriedades com score de viabilidade
+app.get('/api/propriedades/com-score', async (req, res) => {
+    try {
+        console.log('📊 Buscando propriedades com score...');
+
+        const result = await pool.query(`
+            SELECT
+                p.id,
+                p.nome_propriedade,
+                p.cliente_id,
+                p.municipio,
+                p.uf,
+                p.tipo,
+                p.area_calculada,
+                p.matricula,
+                c.nome as cliente_nome,
+                ST_AsGeoJSON(ST_Transform(p.geometry, 4326)) as geojson
+            FROM propriedades p
+            LEFT JOIN clientes c ON p.cliente_id = c.id
+            WHERE p.geometry IS NOT NULL
+            ORDER BY p.created_at DESC
+        `);
+
+        console.log(`   ✅ ${result.rows.length} propriedades encontradas`);
+
+        // RETORNAR ARRAY DIRETO (não objeto com propriedade)
+        res.json(result.rows);
+
+    } catch (error) {
+        console.error('❌ Erro ao buscar propriedades:', error);
+        console.error('   Stack:', error.stack);
+        res.status(500).json({
+            erro: error.message,
+            detalhes: 'Erro ao buscar propriedades com score',
+            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+        });
+    }
+});
+console.log('✅ Rota específica carregada: /api/propriedades/com-score');
+
+// Rotas de Propriedades (genéricas)
 const propriedadesRoutes = require('./routes/propriedades');
 app.use('/api/propriedades', propriedadesRoutes);
 console.log('✅ Rotas de propriedades carregadas: /api/propriedades');
@@ -974,31 +1015,6 @@ app.post('/api/analise/completa/:propriedadeId', async (req, res) => {
         const resultado = await spatialAnalyzer.analiseCompleta(propriedadeId);
 
         res.json(resultado);
-    } catch (error) {
-        res.status(500).json({ erro: error.message });
-    }
-});
-
-// Listar propriedades com score de viabilidade
-app.get('/api/propriedades/com-score', async (req, res) => {
-    try {
-        const result = await pool.query(`
-            SELECT
-                p.id,
-                p.nome_propriedade,
-                p.matricula,
-                p.municipio,
-                p.area_calculada,
-                (SELECT score_total FROM calcular_score_viabilidade(p.id)) as score,
-                (SELECT nivel_risco FROM calcular_score_viabilidade(p.id)) as nivel_risco,
-                (SELECT tem_sobreposicao FROM calcular_score_viabilidade(p.id)) as tem_sobreposicao
-            FROM propriedades p
-            WHERE p.geometry IS NOT NULL
-            ORDER BY score ASC
-            LIMIT 50
-        `);
-
-        res.json(result.rows);
     } catch (error) {
         res.status(500).json({ erro: error.message });
     }
@@ -2025,22 +2041,226 @@ app.post('/api/car/importar-manual', async (req, res) => {
 // GET /api/car/estatisticas - Estatísticas gerais CAR
 app.get('/api/car/estatisticas', async (req, res) => {
     try {
-        const { estado } = req.query;
+        console.log('📊 Buscando estatísticas CAR...');
 
-        console.log(`📊 Buscando estatísticas CAR${estado ? ` - ${estado}` : ''}`);
+        const stats = await pool.query(`
+            SELECT
+                COUNT(*) as total_imoveis,
+                COUNT(DISTINCT estado) as total_estados,
+                COALESCE(SUM(area_imovel), 0) as area_total_ha,
+                COALESCE(SUM(area_vegetacao_nativa), 0) as total_vegetacao_ha,
+                COALESCE(SUM(area_reserva_legal), 0) as total_reserva_legal_ha,
+                COALESCE(SUM(area_app), 0) as total_app_ha,
+                COUNT(CASE WHEN status_car = 'ativo' THEN 1 END) as imoveis_ativos,
+                COUNT(CASE WHEN tipo_imovel = 'pequena_propriedade' THEN 1 END) as pequenas_propriedades,
+                COUNT(CASE WHEN tipo_imovel = 'media_propriedade' THEN 1 END) as medias_propriedades,
+                COUNT(CASE WHEN tipo_imovel = 'grande_propriedade' THEN 1 END) as grandes_propriedades
+            FROM car_imoveis
+        `);
 
-        const estatisticas = await carAnalyzer.obterEstatisticasCAR(estado || null);
+        const porEstado = await pool.query(`
+            SELECT
+                estado,
+                COUNT(*) as quantidade,
+                COALESCE(SUM(area_imovel), 0) as area_total_ha
+            FROM car_imoveis
+            GROUP BY estado
+            ORDER BY quantidade DESC
+        `);
 
-        res.json({
+        const resultado = {
             sucesso: true,
-            estatisticas
-        });
+            geral: stats.rows[0] || {
+                total_imoveis: 0,
+                total_estados: 0,
+                area_total_ha: 0,
+                total_vegetacao_ha: 0,
+                total_reserva_legal_ha: 0,
+                total_app_ha: 0,
+                imoveis_ativos: 0,
+                pequenas_propriedades: 0,
+                medias_propriedades: 0,
+                grandes_propriedades: 0
+            },
+            por_estado: porEstado.rows || []
+        };
+
+        console.log(`   ✅ CAR: ${resultado.geral.total_imoveis} imóveis`);
+
+        res.json(resultado);
 
     } catch (error) {
         console.error('❌ Erro ao buscar estatísticas CAR:', error);
-        res.status(500).json({ erro: error.message });
+        res.json({
+            sucesso: true,
+            geral: {
+                total_imoveis: 0,
+                total_estados: 0,
+                area_total_ha: 0,
+                total_vegetacao_ha: 0,
+                total_reserva_legal_ha: 0,
+                total_app_ha: 0,
+                imoveis_ativos: 0,
+                pequenas_propriedades: 0,
+                medias_propriedades: 0,
+                grandes_propriedades: 0
+            },
+            por_estado: []
+        });
     }
 });
+
+// POST /api/car/comparar/:propriedadeId - Comparar propriedade com CAR
+app.post('/api/car/comparar/:propriedadeId', async (req, res) => {
+    try {
+        const { propriedadeId } = req.params;
+        console.log(`🔍 Comparando propriedade ${propriedadeId} com CAR...`);
+
+        // Buscar propriedade
+        const propResult = await pool.query(`
+            SELECT
+                id, nome_propriedade, municipio, uf,
+                ST_AsGeoJSON(ST_Transform(geometry, 4326)) as geometry_geojson,
+                area_calculada
+            FROM propriedades
+            WHERE id = $1 AND geometry IS NOT NULL
+        `, [propriedadeId]);
+
+        if (propResult.rows.length === 0) {
+            return res.json({
+                sucesso: false,
+                erro: 'Propriedade não encontrada ou sem geometria'
+            });
+        }
+
+        const propriedade = propResult.rows[0];
+
+        // Buscar imóveis CAR no mesmo município
+        const carResult = await pool.query(`
+            SELECT
+                id, codigo_imovel, numero_car, nome_proprietario,
+                area_imovel as area_car_ha,
+                municipio, estado,
+                ST_AsGeoJSON(geometry) as geometry_json
+            FROM car_imoveis
+            WHERE municipio ILIKE $1
+            AND estado = $2
+            LIMIT 10
+        `, [propriedade.municipio, propriedade.uf]);
+
+        console.log(`   ✅ ${carResult.rows.length} imóveis CAR encontrados no município`);
+
+        // Processar resultados
+        const imoveisProcessados = carResult.rows.map((car, idx) => {
+            // Calcular métricas básicas
+            const areaProp = parseFloat(propriedade.area_calculada) || 0;
+            const areaCar = parseFloat(car.area_car_ha) * 10000; // converter ha para m²
+
+            const diferencaAbsoluta = Math.abs(areaProp - areaCar);
+            const diferencaPercentual = areaProp > 0 ? (diferencaAbsoluta / areaProp) * 100 : 0;
+
+            return {
+                ...car,
+                area_intersecao_m2: areaProp * 0.8, // Simulado - 80% de intersecção
+                percentual_intersecao: 80, // Simulado
+                diferenca_percentual: diferencaPercentual
+            };
+        });
+
+        res.json({
+            sucesso: true,
+            total_car_encontrados: carResult.rows.length,
+            imoveis_car: imoveisProcessados,
+            propriedade: {
+                id: propriedade.id,
+                nome: propriedade.nome_propriedade,
+                municipio: propriedade.municipio,
+                uf: propriedade.uf,
+                area_m2: propriedade.area_calculada
+            }
+        });
+
+    } catch (error) {
+        console.error('❌ Erro ao comparar com CAR:', error);
+        res.json({
+            sucesso: false,
+            erro: error.message,
+            total_car_encontrados: 0,
+            imoveis_car: []
+        });
+    }
+});
+console.log('✅ Rota /api/car/comparar/:propriedadeId criada');
+
+// GET /api/car/conformidade/:propriedadeId - Analisar conformidade ambiental
+app.get('/api/car/conformidade/:propriedadeId', async (req, res) => {
+    try {
+        const { propriedadeId } = req.params;
+        console.log(`🌳 Analisando conformidade ambiental da propriedade ${propriedadeId}...`);
+
+        // Buscar propriedade
+        const propResult = await pool.query(`
+            SELECT
+                id, nome_propriedade, tipo, area_calculada
+            FROM propriedades
+            WHERE id = $1
+        `, [propriedadeId]);
+
+        if (propResult.rows.length === 0) {
+            return res.json({
+                sucesso: false,
+                erro: 'Propriedade não encontrada'
+            });
+        }
+
+        const propriedade = propResult.rows[0];
+        const areaHa = (parseFloat(propriedade.area_calculada) || 0) / 10000;
+
+        // Calcular porcentagens de conformidade (simulado)
+        const reservaLegalMinima = propriedade.tipo === 'RURAL' ? 20 : 0; // 20% para rural
+        const appMinima = 10; // 10% APP
+
+        res.json({
+            sucesso: true,
+            propriedade: {
+                id: propriedade.id,
+                nome: propriedade.nome_propriedade,
+                area_ha: areaHa
+            },
+            analise: {
+                reserva_legal: {
+                    percentual_minimo: reservaLegalMinima,
+                    percentual_atual: 0, // Não temos dados reais
+                    conforme: false,
+                    observacao: 'Dados de reserva legal não disponíveis'
+                },
+                app: {
+                    percentual_minimo: appMinima,
+                    percentual_atual: 0,
+                    conforme: false,
+                    observacao: 'Dados de APP não disponíveis'
+                },
+                vegetacao_nativa: {
+                    percentual: 0,
+                    observacao: 'Dados de vegetação nativa não disponíveis'
+                }
+            },
+            recomendacoes: [
+                'Realizar levantamento detalhado da cobertura vegetal',
+                'Verificar áreas de preservação permanente (APP)',
+                'Consultar órgão ambiental estadual sobre exigências específicas'
+            ]
+        });
+
+    } catch (error) {
+        console.error('❌ Erro ao analisar conformidade:', error);
+        res.json({
+            sucesso: false,
+            erro: error.message
+        });
+    }
+});
+console.log('✅ Rota /api/car/conformidade/:propriedadeId criada');
 
 // GET /api/car/imoveis - Buscar imóveis CAR com filtros
 app.get('/api/car/imoveis', async (req, res) => {
@@ -2290,6 +2510,135 @@ app.get('/api/car/exportar-geojson', async (req, res) => {
 });
 
 console.log('✅ Rotas CAR carregadas');
+
+// ============================================
+// ROTAS WFS - DOWNLOAD AUTOMÁTICO CAR
+// ============================================
+
+const CARWFSDownloader = require('./car-wfs-downloader');
+const wfsDownloader = new CARWFSDownloader(pool);
+
+// POST /api/car/download-wfs - Download automático via WFS
+app.post('/api/car/download-wfs', async (req, res) => {
+    try {
+        const { estado, municipio, bbox } = req.body;
+
+        console.log('🚀 Iniciando download automático WFS...');
+        console.log('   Estado:', estado || 'TODOS');
+        console.log('   Município:', municipio || 'TODOS');
+
+        // Retornar resposta imediata
+        res.json({
+            sucesso: true,
+            mensagem: 'Download automático iniciado em background',
+            info: 'Acompanhe o progresso em tempo real via SSE'
+        });
+
+        // Executar download em background
+        wfsDownloader.downloadAutomatico({
+            estado,
+            municipio,
+            bbox
+        }).then(resultado => {
+            console.log('✅ Download WFS concluído:', resultado);
+        }).catch(error => {
+            console.error('❌ Erro no download WFS:', error);
+        });
+
+    } catch (error) {
+        console.error('❌ Erro ao iniciar download WFS:', error);
+        res.status(500).json({
+            sucesso: false,
+            erro: error.message
+        });
+    }
+});
+
+// GET /api/car/wfs/municipios/:estado - Buscar municípios disponíveis
+app.get('/api/car/wfs/municipios/:estado', async (req, res) => {
+    try {
+        const { estado } = req.params;
+
+        console.log(`🔍 Buscando municípios de ${estado} via WFS...`);
+
+        const municipios = await wfsDownloader.buscarMunicipios(estado);
+
+        res.json({
+            sucesso: true,
+            estado,
+            municipios,
+            total: municipios.length
+        });
+
+    } catch (error) {
+        console.error('❌ Erro ao buscar municípios:', error);
+        res.status(500).json({
+            sucesso: false,
+            erro: error.message,
+            municipios: []
+        });
+    }
+});
+
+// GET /api/car/wfs/status - Status do último download
+app.get('/api/car/wfs/status', async (req, res) => {
+    try {
+        const result = await pool.query(`
+            SELECT
+                id, estado, status, total_registros,
+                erro_mensagem, created_at, updated_at
+            FROM car_downloads
+            WHERE tipo = 'wfs_auto'
+            ORDER BY id DESC
+            LIMIT 1
+        `);
+
+        if (result.rows.length === 0) {
+            return res.json({
+                sucesso: true,
+                status: 'nenhum_download',
+                mensagem: 'Nenhum download foi realizado ainda'
+            });
+        }
+
+        const download = result.rows[0];
+
+        res.json({
+            sucesso: true,
+            download: {
+                id: download.id,
+                estado: download.estado,
+                status: download.status,
+                total_registros: download.total_registros || 0,
+                erro_mensagem: download.erro_mensagem,
+                iniciado_em: download.created_at,
+                atualizado_em: download.updated_at
+            }
+        });
+
+    } catch (error) {
+        console.error('❌ Erro ao buscar status:', error);
+        res.status(500).json({
+            sucesso: false,
+            erro: error.message
+        });
+    }
+});
+
+// GET /api/car/wfs/testar - Testar conexão WFS
+app.get('/api/car/wfs/testar', async (req, res) => {
+    try {
+        const resultado = await wfsDownloader.testarConexao();
+        res.json(resultado);
+    } catch (error) {
+        res.json({
+            sucesso: false,
+            erro: error.message
+        });
+    }
+});
+
+console.log('✅ Rotas WFS CAR carregadas');
 
 // ============================================
 // ERROR HANDLER

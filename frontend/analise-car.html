@@ -4,24 +4,34 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Análise CAR - Sistema FHV</title>
-    <link rel="stylesheet" href="styles.css">
+    <!-- styles.css REMOVIDO para evitar conflitos com fullscreen -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
 
-        body {
+        html, body {
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 100% !important;
+            height: 100% !important;
+            overflow: hidden !important;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            overflow: hidden;
         }
 
         .car-container {
             display: grid;
             grid-template-columns: 350px 1fr;
-            height: 100vh;
+            width: 100vw !important;
+            height: 100vh !important;
             gap: 0;
-            margin: 0;
-            padding: 0;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: hidden !important;
         }
 
         .sidebar {
@@ -33,19 +43,21 @@
         }
 
         .map-container {
-            position: relative;
-            height: 100%;
-            width: 100%;
+            position: relative !important;
+            height: 100% !important;
+            width: 100% !important;
+            min-height: 100vh !important;
         }
 
         #map {
-            width: 100%;
-            height: 100%;
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
+            width: 100% !important;
+            height: 100% !important;
+            min-height: 100vh !important;
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            bottom: 0 !important;
         }
 
         .section {
@@ -385,15 +397,40 @@
 
             propriedadeLayer = L.layerGroup().addTo(map);
             carLayer = L.layerGroup().addTo(map);
+
+            // Forçar redimensionamento após 100ms
+            setTimeout(() => {
+                map.invalidateSize();
+                console.log('✅ Mapa CAR redimensionado para fullscreen');
+            }, 100);
         }
 
         async function carregarPropriedades() {
             try {
-                const response = await fetch('/api/propriedades');
+                console.log('🔍 Carregando propriedades...');
+
+                const response = await fetch('/api/propriedades/com-score');
+
+                if (!response.ok) {
+                    throw new Error(`Erro HTTP: ${response.status}`);
+                }
+
                 const propriedades = await response.json();
 
+                console.log('✅ Propriedades recebidas:', propriedades);
+
+                if (!Array.isArray(propriedades)) {
+                    console.error('❌ Resposta não é array:', propriedades);
+                    throw new Error('Formato de resposta inválido');
+                }
+
                 const select = document.getElementById('propriedadeSelect');
-                select.innerHTML = '<option value="">Selecione...</option>';
+                select.innerHTML = '<option value="">Selecione uma propriedade...</option>';
+
+                if (propriedades.length === 0) {
+                    select.innerHTML += '<option value="" disabled>Nenhuma propriedade cadastrada</option>';
+                    return;
+                }
 
                 propriedades.forEach(p => {
                     const option = document.createElement('option');
@@ -402,6 +439,8 @@
                     select.appendChild(option);
                 });
 
+                console.log(`✅ ${propriedades.length} propriedades carregadas`);
+
                 select.addEventListener('change', function() {
                     if (this.value) {
                         carregarPropriedadeNoMapa(this.value);
@@ -409,7 +448,9 @@
                 });
 
             } catch (error) {
-                console.error('Erro ao carregar propriedades:', error);
+                console.error('❌ Erro ao carregar propriedades:', error);
+                const select = document.getElementById('propriedadeSelect');
+                select.innerHTML = '<option value="" disabled>Erro ao carregar propriedades</option>';
             }
         }
 
@@ -488,7 +529,8 @@
             const container = document.getElementById('carInfo');
             const section = document.getElementById('resultadoCAR');
 
-            if (resultado.total_car_encontrados === 0) {
+            // Validar dados
+            if (!resultado || resultado.total_car_encontrados === 0 || !resultado.imoveis_car || resultado.imoveis_car.length === 0) {
                 container.innerHTML = `
                     <p style="color: #6c757d;">
                         <i class="fas fa-info-circle"></i>
@@ -501,7 +543,10 @@
 
             let html = `<p><strong>${resultado.total_car_encontrados} imóvel(is) CAR encontrado(s)</strong></p>`;
 
-            resultado.imoveis_car.slice(0, 3).forEach((car, idx) => {
+            // Garantir que imoveis_car é array antes de usar slice
+            const imoveis = Array.isArray(resultado.imoveis_car) ? resultado.imoveis_car : [];
+
+            imoveis.slice(0, 3).forEach((car, idx) => {
                 html += `
                     <div style="padding: 10px; background: white; margin: 8px 0; border-radius: 6px; border-left: 3px solid #28a745;">
                         <strong>CAR #${idx + 1}</strong><br>
@@ -618,10 +663,14 @@
                 const response = await fetch('/api/car/estatisticas');
                 const data = await response.json();
 
-                if (!data.sucesso) {
+                console.log('📊 Estatísticas CAR:', data);
+
+                if (!data.sucesso || !data.geral) {
+                    console.warn('⚠️ Dados CAR vazios');
                     document.getElementById('statsCAR').innerHTML = `
                         <p style="color: #6c757d; font-size: 13px;">
-                            Nenhum dado CAR disponível
+                            <i class="fas fa-info-circle"></i>
+                            Nenhum dado CAR importado ainda
                         </p>
                     `;
                     return;
@@ -632,20 +681,36 @@
                 const html = `
                     <div class="stats-grid">
                         <div class="stat-box">
-                            <div class="stat-value">${Number(stats.total_imoveis || 0)}</div>
-                            <div class="stat-label">Imóveis CAR</div>
+                            <div class="stat-value">${Number(stats.total_imoveis || 0).toLocaleString('pt-BR')}</div>
+                            <div class="stat-label">Total Imóveis</div>
                         </div>
                         <div class="stat-box">
-                            <div class="stat-value">${Number(stats.area_total_ha || 0).toFixed(0)}</div>
+                            <div class="stat-value">${stats.total_estados || 0}</div>
+                            <div class="stat-label">Estados</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-value">${Number(stats.area_total_ha || 0).toLocaleString('pt-BR', {maximumFractionDigits: 0})}</div>
                             <div class="stat-label">Área Total (ha)</div>
                         </div>
                         <div class="stat-box">
-                            <div class="stat-value">${Number(stats.total_reserva_legal_ha || 0).toFixed(0)}</div>
+                            <div class="stat-value">${Number(stats.total_vegetacao_ha || 0).toLocaleString('pt-BR', {maximumFractionDigits: 0})}</div>
+                            <div class="stat-label">Vegetação Nativa (ha)</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-value">${Number(stats.total_reserva_legal_ha || 0).toLocaleString('pt-BR', {maximumFractionDigits: 0})}</div>
                             <div class="stat-label">Reserva Legal (ha)</div>
                         </div>
                         <div class="stat-box">
-                            <div class="stat-value">${Number(stats.total_app_ha || 0).toFixed(0)}</div>
+                            <div class="stat-value">${Number(stats.total_app_ha || 0).toLocaleString('pt-BR', {maximumFractionDigits: 0})}</div>
                             <div class="stat-label">APP (ha)</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-value">${Number(stats.imoveis_ativos || 0).toLocaleString('pt-BR')}</div>
+                            <div class="stat-label">Imóveis Ativos</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-value">${Number(stats.pequenas_propriedades || 0).toLocaleString('pt-BR')}</div>
+                            <div class="stat-label">Pequenas Propriedades</div>
                         </div>
                     </div>
                 `;
@@ -653,7 +718,13 @@
                 document.getElementById('statsCAR').innerHTML = html;
 
             } catch (error) {
-                console.error('Erro ao carregar estatísticas CAR:', error);
+                console.error('❌ Erro ao carregar estatísticas CAR:', error);
+                document.getElementById('statsCAR').innerHTML = `
+                    <p style="color: #dc3545; font-size: 13px;">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        Erro ao carregar estatísticas
+                    </p>
+                `;
             }
         }
 

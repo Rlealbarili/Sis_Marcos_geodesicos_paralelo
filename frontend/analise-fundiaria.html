@@ -5,22 +5,30 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Análise Fundiária - COGEP</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <link rel="stylesheet" href="styles.css">
+    <!-- styles.css REMOVIDO para evitar conflitos com fullscreen -->
     <style>
-        body {
-            margin: 0;
-            padding: 0;
+        * {
+            box-sizing: border-box;
+        }
+
+        html, body {
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 100% !important;
+            height: 100% !important;
+            overflow: hidden !important;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            overflow: hidden;
         }
 
         .analise-container {
             display: grid;
             grid-template-columns: 400px 1fr;
-            height: 100vh;
+            width: 100vw !important;
+            height: 100vh !important;
             gap: 0;
-            margin: 0;
-            padding: 0;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: hidden !important;
         }
 
         .sidebar {
@@ -38,19 +46,21 @@
         }
 
         .map-container {
-            position: relative;
-            height: 100%;
-            width: 100%;
+            position: relative !important;
+            height: 100% !important;
+            width: 100% !important;
+            min-height: 100vh !important;
         }
 
         #map {
-            width: 100%;
-            height: 100%;
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
+            width: 100% !important;
+            height: 100% !important;
+            min-height: 100vh !important;
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            bottom: 0 !important;
         }
 
         .form-group {
@@ -294,30 +304,55 @@
             propriedadeLayer = L.layerGroup().addTo(map);
             sigefLayer = L.layerGroup().addTo(map);
             conflitosLayer = L.layerGroup().addTo(map);
+
+            // Forçar redimensionamento após 100ms
+            setTimeout(() => {
+                map.invalidateSize();
+                console.log('✅ Mapa redimensionado para fullscreen');
+            }, 100);
         }
 
         async function carregarPropriedades() {
             try {
+                console.log('🔍 Carregando propriedades...');
+
                 const response = await fetch(`${API_BASE}/propriedades/com-score`);
+
+                if (!response.ok) {
+                    throw new Error(`Erro HTTP: ${response.status}`);
+                }
+
                 const propriedades = await response.json();
 
+                console.log('✅ Propriedades recebidas:', propriedades);
+
+                // Verificar se é array
+                if (!Array.isArray(propriedades)) {
+                    console.error('❌ Resposta não é array:', propriedades);
+                    throw new Error('Formato de resposta inválido');
+                }
+
                 const select = document.getElementById('propriedadeSelect');
-                select.innerHTML = '<option value="">Selecione...</option>';
+                select.innerHTML = '<option value="">Selecione uma propriedade...</option>';
+
+                if (propriedades.length === 0) {
+                    select.innerHTML += '<option value="" disabled>Nenhuma propriedade cadastrada</option>';
+                    return;
+                }
 
                 propriedades.forEach(p => {
                     const option = document.createElement('option');
                     option.value = p.id;
-                    const scoreText = p.score !== null ? ` [Score: ${p.score}]` : '';
-                    option.textContent = `${p.nome_propriedade}${scoreText}`;
+                    option.textContent = `${p.nome_propriedade} - ${p.municipio}/${p.uf}`;
                     select.appendChild(option);
                 });
 
                 console.log(`✅ ${propriedades.length} propriedades carregadas`);
 
             } catch (error) {
-                console.error('Erro ao carregar propriedades:', error);
-                document.getElementById('propriedadeSelect').innerHTML =
-                    '<option value="">Erro ao carregar</option>';
+                console.error('❌ Erro ao carregar propriedades:', error);
+                const select = document.getElementById('propriedadeSelect');
+                select.innerHTML = '<option value="" disabled>Erro ao carregar propriedades</option>';
             }
         }
 
