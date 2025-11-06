@@ -25,16 +25,16 @@ class DataExporter {
         const workbook = new ExcelJS.Workbook();
         const sheet = workbook.addWorksheet('Confrontantes');
 
-        // Configurar colunas
+        // Configurar colunas (dados corretos de parcelas SIGEF)
         sheet.columns = [
-            { header: 'ID', key: 'id', width: 10 },
-            { header: 'Nome', key: 'nome', width: 30 },
+            { header: 'Código SIGEF', key: 'codigo', width: 40 },
+            { header: 'Proprietário', key: 'proprietario', width: 35 },
+            { header: 'Tipo Contato', key: 'tipo_contato', width: 15 },
             { header: 'Matrícula', key: 'matricula', width: 20 },
             { header: 'Município', key: 'municipio', width: 25 },
-            { header: 'Área (m²)', key: 'area', width: 15 },
-            { header: 'Perímetro (m)', key: 'perimetro', width: 15 },
+            { header: 'Área (ha)', key: 'area', width: 15 },
             { header: 'Distância (m)', key: 'distancia', width: 15 },
-            { header: 'Observações', key: 'observacoes', width: 40 }
+            { header: 'Azimute (°)', key: 'azimute', width: 15 }
         ];
 
         // Estilizar cabeçalho
@@ -46,17 +46,17 @@ class DataExporter {
         };
         sheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
 
-        // Adicionar dados
+        // Adicionar dados (usar campos corretos das parcelas SIGEF)
         confrontantes.forEach(c => {
             sheet.addRow({
-                id: c.id,
-                nome: c.nome_propriedade,
-                matricula: c.matricula,
-                municipio: c.municipio,
-                area: c.area_m2 ? parseFloat(c.area_m2).toFixed(2) : 'N/A',
-                perimetro: c.perimetro_m ? parseFloat(c.perimetro_m).toFixed(2) : 'N/A',
-                distancia: c.distancia ? parseFloat(c.distancia).toFixed(2) : 'N/A',
-                observacoes: c.observacoes || ''
+                codigo: c.codigo_parcela || 'N/A',
+                proprietario: c.proprietario || 'N/A',
+                tipo_contato: c.tipo_contato === 'limite_comum' ? 'Limite Comum' : 'Próximo',
+                matricula: c.matricula || 'N/A',
+                municipio: c.municipio || 'N/A',
+                area: c.area_ha ? parseFloat(c.area_ha).toFixed(2) : 'N/A',
+                distancia: c.distancia_m ? parseFloat(c.distancia_m).toFixed(2) : 'N/A',
+                azimute: c.azimute ? parseFloat(c.azimute).toFixed(2) : 'N/A'
             });
         });
 
@@ -157,28 +157,28 @@ class DataExporter {
         const csvWriter = csv({
             path: filepath,
             header: [
-                { id: 'id', title: 'ID' },
-                { id: 'nome', title: 'Nome' },
+                { id: 'codigo', title: 'Código SIGEF' },
+                { id: 'proprietario', title: 'Proprietário' },
+                { id: 'tipo_contato', title: 'Tipo Contato' },
                 { id: 'matricula', title: 'Matrícula' },
                 { id: 'municipio', title: 'Município' },
-                { id: 'area', title: 'Área (m²)' },
-                { id: 'perimetro', title: 'Perímetro (m)' },
+                { id: 'area', title: 'Área (ha)' },
                 { id: 'distancia', title: 'Distância (m)' },
-                { id: 'observacoes', title: 'Observações' }
+                { id: 'azimute', title: 'Azimute (°)' }
             ],
             fieldDelimiter: ';',
             encoding: 'utf8'
         });
 
         const records = confrontantes.map(c => ({
-            id: c.id,
-            nome: c.nome_propriedade,
-            matricula: c.matricula,
-            municipio: c.municipio,
-            area: c.area_m2 ? parseFloat(c.area_m2).toFixed(2) : 'N/A',
-            perimetro: c.perimetro_m ? parseFloat(c.perimetro_m).toFixed(2) : 'N/A',
-            distancia: c.distancia ? parseFloat(c.distancia).toFixed(2) : 'N/A',
-            observacoes: c.observacoes || ''
+            codigo: c.codigo_parcela || 'N/A',
+            proprietario: c.proprietario || 'N/A',
+            tipo_contato: c.tipo_contato === 'limite_comum' ? 'Limite Comum' : 'Próximo',
+            matricula: c.matricula || 'N/A',
+            municipio: c.municipio || 'N/A',
+            area: c.area_ha ? parseFloat(c.area_ha).toFixed(2) : 'N/A',
+            distancia: c.distancia_m ? parseFloat(c.distancia_m).toFixed(2) : 'N/A',
+            azimute: c.azimute ? parseFloat(c.azimute).toFixed(2) : 'N/A'
         }));
 
         await csvWriter.writeRecords(records);

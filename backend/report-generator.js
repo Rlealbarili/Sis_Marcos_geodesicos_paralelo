@@ -483,12 +483,20 @@ class ReportGenerator {
             doc.addPage();
           }
 
-          doc.fontSize(11).text(`${index + 1}. ${conf.nome_propriedade}`, { bold: true });
+          // Usar dados corretos das parcelas SIGEF
+          const nome = conf.proprietario || `Parcela ${conf.codigo_parcela?.substring(0, 8) || 'N/A'}`;
+          const area = conf.area_ha ? parseFloat(conf.area_ha).toFixed(2) + ' ha' : 'N/A';
+          const distancia = conf.distancia_m ? parseFloat(conf.distancia_m).toFixed(2) + ' m' : 'N/A';
+          const tipoContato = conf.tipo_contato === 'limite_comum' ? '🔗 Limite Comum' : '📍 Próximo';
+
+          doc.fontSize(11).text(`${index + 1}. ${nome}`, { bold: true });
           doc.fontSize(9)
+             .text(`   Tipo: ${tipoContato}`)
              .text(`   Matrícula: ${conf.matricula || 'N/A'}`)
              .text(`   Município: ${conf.municipio || 'N/A'}`)
-             .text(`   Área: ${conf.area_m2 ? (conf.area_m2 / 10000).toFixed(4) + ' ha' : 'N/A'}`)
-             .text(`   Distância: ${conf.distancia ? conf.distancia.toFixed(2) + ' m' : 'N/A'}`)
+             .text(`   Área: ${area}`)
+             .text(`   Distância: ${distancia}`)
+             .text(`   Código SIGEF: ${conf.codigo_parcela || 'N/A'}`)
              .moveDown(0.5);
         });
 

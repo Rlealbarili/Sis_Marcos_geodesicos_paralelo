@@ -246,6 +246,12 @@ app.get('/api/marcos/bbox', async (req, res) => {
 app.get('/api/marcos/geojson', async (req, res) => {
     try {
         const limite = Math.min(parseInt(req.query.limite) || 1000, 10000);
+        const incluirNaoLevantados = req.query.incluir_nao_levantados === 'true';
+
+        // Construir condição WHERE dinamicamente
+        const whereClause = incluirNaoLevantados ?
+            '1=1' :  // Incluir todos os marcos
+            'geom IS NOT NULL';  // Apenas levantados
 
         const result = await query(`
             SELECT
@@ -260,14 +266,15 @@ app.get('/api/marcos/geojson', async (req, res) => {
                                 'tipo', tipo,
                                 'municipio', municipio,
                                 'estado', estado,
-                                'altitude', altitude
+                                'altitude', altitude,
+                                'levantado', CASE WHEN geom IS NOT NULL THEN true ELSE false END
                             )
                         )
                     )
                 ) as geojson
             FROM (
                 SELECT * FROM marcos_levantados
-                WHERE geom IS NOT NULL
+                WHERE ${whereClause}
                 ORDER BY codigo
                 LIMIT $1
             ) subquery
@@ -583,6 +590,43 @@ console.log('✅ Rota específica carregada: /api/propriedades/com-score');
 const propriedadesRoutes = require('./routes/propriedades');
 app.use('/api/propriedades', propriedadesRoutes);
 console.log('✅ Rotas de propriedades carregadas: /api/propriedades');
+
+// ============================================
+// ENDPOINT: Listar Clientes
+// ============================================
+
+app.get('/api/clientes', async (req, res) => {
+    try {
+        const result = await pool.query(`
+            SELECT
+                id,
+                nome,
+                tipo_pessoa,
+                cpf_cnpj,
+                email,
+                telefone,
+                endereco,
+                created_at
+            FROM clientes
+            ORDER BY nome ASC
+        `);
+
+        res.json({
+            success: true,
+            data: result.rows,
+            total: result.rows.length
+        });
+    } catch (error) {
+        console.error('❌ Erro ao listar clientes:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Erro ao buscar clientes',
+            error: error.message
+        });
+    }
+});
+
+console.log('✅ Endpoint carregado: GET /api/clientes');
 
 // ============================================
 // ENDPOINT: Salvar Memorial Completo
@@ -1468,8 +1512,8 @@ app.post('/api/relatorios/confrontantes/:propriedadeId', async (req, res) => {
         const { propriedadeId } = req.params;
         console.log(`📄 Gerando relatório de confrontantes para propriedade ${propriedadeId}`);
 
-        // Obter confrontantes usando SpatialAnalyzer
-        const resultado = await spatialAnalyzer.identificarConfrontantes(propriedadeId, 100);
+        // Obter confrontantes usando SpatialAnalyzer (raio 500m)
+        const resultado = await spatialAnalyzer.identificarConfrontantes(propriedadeId, 500);
         const confrontantes = resultado.sucesso ? resultado.confrontantes : [];
 
         // Gerar PDF
@@ -1547,8 +1591,8 @@ app.post('/api/relatorios/confrontantes-excel/:propriedadeId', async (req, res) 
         const { propriedadeId } = req.params;
         console.log(`📊 Exportando confrontantes para Excel - propriedade ${propriedadeId}`);
 
-        // Obter confrontantes
-        const resultado = await spatialAnalyzer.identificarConfrontantes(propriedadeId, 100);
+        // Obter confrontantes (raio 500m)
+        const resultado = await spatialAnalyzer.identificarConfrontantes(propriedadeId, 500);
         const confrontantes = resultado.sucesso ? resultado.confrontantes : [];
 
         // Gerar Excel
@@ -1580,8 +1624,8 @@ app.post('/api/relatorios/confrontantes-csv/:propriedadeId', async (req, res) =>
         const { propriedadeId } = req.params;
         console.log(`📊 Exportando confrontantes para CSV - propriedade ${propriedadeId}`);
 
-        // Obter confrontantes
-        const resultado = await spatialAnalyzer.identificarConfrontantes(propriedadeId, 100);
+        // Obter confrontantes (raio 500m)
+        const resultado = await spatialAnalyzer.identificarConfrontantes(propriedadeId, 500);
         const confrontantes = resultado.sucesso ? resultado.confrontantes : [];
 
         // Gerar CSV
@@ -2639,6 +2683,197 @@ app.get('/api/car/wfs/testar', async (req, res) => {
 });
 
 console.log('✅ Rotas WFS CAR carregadas');
+
+// ============================================
+// ROTAS: CAR ZIP UPLOADER (Upload Manual de ZIP)
+// ============================================
+
+const CARZipUploader = require('./car-zip-uploader');
+
+// Configuração do multer para upload de arquivos ZIP
+const zipStorage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        const uploadDir = path.join(__dirname, '../uploads');
+        if (!fs.existsSync(uploadDir)) {
+            fs.mkdirSync(uploadDir, { recursive: true });
+        }
+        cb(null, uploadDir);
+    },
+    filename: (req, file, cb) => {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        cb(null, `car-${uniqueSuffix}.zip`);
+    }
+});
+
+const zipUpload = multer({
+    storage: zipStorage,
+    limits: {
+        fileSize: 1024 * 1024 * 1024 // 1GB máximo
+    },
+    fileFilter: (req, file, cb) => {
+        if (file.mimetype === 'application/zip' || file.originalname.endsWith('.zip')) {
+            cb(null, true);
+        } else {
+            cb(new Error('Apenas arquivos ZIP são permitidos'), false);
+        }
+    }
+});
+
+const zipUploader = new CARZipUploader(pool);
+
+/**
+ * POST /api/car/upload-zip
+ * Upload de arquivo ZIP do CAR com processamento automático
+ *
+ * Body (multipart/form-data):
+ * - file: arquivo ZIP (obrigatório)
+ * - estado: sigla do estado (opcional, será detectado automaticamente)
+ *
+ * Resposta:
+ * {
+ *   "sucesso": true,
+ *   "mensagem": "Upload iniciado",
+ *   "arquivo": "nome_do_arquivo.zip"
+ * }
+ */
+app.post('/api/car/upload-zip', zipUpload.single('file'), async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({
+                sucesso: false,
+                erro: 'Nenhum arquivo foi enviado'
+            });
+        }
+
+        const zipPath = req.file.path;
+        const estado = req.body.estado || null;
+
+        console.log(`📦 Upload recebido: ${req.file.originalname} (${(req.file.size / 1024 / 1024).toFixed(2)} MB)`);
+
+        // Responder imediatamente ao cliente
+        res.json({
+            sucesso: true,
+            mensagem: 'Upload recebido. Processamento iniciado em background.',
+            arquivo: req.file.originalname,
+            tamanhoMB: (req.file.size / 1024 / 1024).toFixed(2)
+        });
+
+        // Processar em background
+        zipUploader.processarZip(zipPath, estado)
+            .then(resultado => {
+                console.log('✅ Processamento do ZIP concluído:', {
+                    arquivo: req.file.originalname,
+                    estado: resultado.estado,
+                    importados: resultado.totalImportados,
+                    erros: resultado.totalErros,
+                    tempo: `${resultado.tempoProcessamento}s`
+                });
+            })
+            .catch(error => {
+                console.error('❌ Erro no processamento do ZIP:', error.message);
+            });
+
+    } catch (error) {
+        console.error('❌ Erro no upload:', error);
+        res.status(500).json({
+            sucesso: false,
+            erro: error.message
+        });
+    }
+});
+
+/**
+ * GET /api/car/upload-status/:downloadId
+ * Consulta status de um download/upload específico
+ */
+app.get('/api/car/upload-status/:downloadId', async (req, res) => {
+    try {
+        const { downloadId } = req.params;
+
+        const result = await pool.query(`
+            SELECT
+                id,
+                estado,
+                data_download,
+                total_imoveis,
+                status,
+                origem,
+                data_conclusao
+            FROM car_downloads
+            WHERE id = $1
+        `, [downloadId]);
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({
+                sucesso: false,
+                erro: 'Download não encontrado'
+            });
+        }
+
+        res.json({
+            sucesso: true,
+            download: result.rows[0]
+        });
+
+    } catch (error) {
+        console.error('❌ Erro ao consultar status:', error);
+        res.status(500).json({
+            sucesso: false,
+            erro: error.message
+        });
+    }
+});
+
+/**
+ * GET /api/car/uploads/ativos
+ * Lista todos os uploads CAR em andamento ou recentes
+ */
+app.get('/api/car/uploads/ativos', async (req, res) => {
+    try {
+        const result = await pool.query(`
+            SELECT
+                id,
+                estado,
+                tipo,
+                data_download,
+                total_registros,
+                status,
+                arquivo_nome,
+                EXTRACT(EPOCH FROM (NOW() - data_download)) as tempo_decorrido_segundos
+            FROM car_downloads
+            WHERE data_download >= NOW() - INTERVAL '24 hours'
+            ORDER BY data_download DESC
+            LIMIT 10
+        `);
+
+        const uploads = result.rows.map(row => ({
+            id: row.id,
+            estado: row.estado,
+            tipo: row.tipo,
+            dataInicio: row.data_download,
+            totalRegistros: row.total_registros || 0,
+            status: row.status, // 'processando' ou 'concluido'
+            arquivo: row.arquivo_nome,
+            tempoDecorrido: Math.floor(row.tempo_decorrido_segundos),
+            emAndamento: row.status === 'processando'
+        }));
+
+        res.json({
+            sucesso: true,
+            uploads: uploads,
+            totalAtivos: uploads.filter(u => u.emAndamento).length
+        });
+
+    } catch (error) {
+        console.error('❌ Erro ao consultar uploads:', error);
+        res.status(500).json({
+            sucesso: false,
+            erro: error.message
+        });
+    }
+});
+
+console.log('✅ Rotas CAR ZIP Uploader carregadas');
 
 // ============================================
 // ERROR HANDLER
