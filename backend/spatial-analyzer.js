@@ -62,7 +62,7 @@ class SpatialAnalyzer {
     }
 
     // Identificar confrontantes
-    async identificarConfrontantes(propriedadeId, raioMetros = 100) {
+    async identificarConfrontantes(propriedadeId, raioMetros = 500) {
         try {
             console.log(`🔍 Identificando confrontantes: Propriedade #${propriedadeId}`);
 

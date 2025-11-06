@@ -419,7 +419,7 @@
                     <ul style="margin-top: 10px; padding-left: 20px; font-size:13px;">
                         <li>Sobreposições: ${score.tem_sobreposicao ? '⚠️ SIM' : '✅ NÃO'}</li>
                         <li>Quantidade: ${score.qtd_sobreposicoes || 0}</li>
-                        <li>Área sobreposta: ${(score.area_sobreposta_m2 || 0).toFixed(2)} m²</li>
+                        <li>Área sobreposta: ${parseFloat(score.area_sobreposta_m2 || 0).toFixed(2)} m²</li>
                         <li>Confrontantes: ${score.qtd_confrontantes || 0}</li>
                     </ul>
                 </div>
@@ -448,8 +448,8 @@
                         <small>Tipo: ${s.tipo_sobreposicao}</small><br>
                         <small>Código: ${s.codigo_parcela || 'N/A'}</small><br>
                         <small>Proprietário SIGEF: ${s.proprietario_sigef || 'N/A'}</small><br>
-                        <small>Área: ${(s.area_sobreposicao_m2 || 0).toFixed(2)} m²</small><br>
-                        <small>Percentual: ${(s.percentual_propriedade || 0).toFixed(1)}%</small>
+                        <small>Área: ${parseFloat(s.area_sobreposicao_m2 || 0).toFixed(2)} m²</small><br>
+                        <small>Percentual: ${parseFloat(s.percentual_propriedade || 0).toFixed(1)}%</small>
                     </div>
                 `;
             });
@@ -461,7 +461,7 @@
             const container = document.getElementById('confrontantesDisplay');
 
             if (!confrontantes || !confrontantes.sucesso || confrontantes.total_confrontantes === 0) {
-                container.innerHTML = '<p>ℹ️ Nenhum confrontante identificado no raio de 100m</p>';
+                container.innerHTML = '<p>ℹ️ Nenhum confrontante identificado no raio de 500m</p>';
                 return;
             }
 
@@ -476,8 +476,8 @@
                         <small>Tipo: ${c.tipo_contato}</small><br>
                         <small>Código: ${c.codigo_parcela || 'N/A'}</small><br>
                         <small>Proprietário: ${c.proprietario || 'N/A'}</small><br>
-                        <small>Distância: ${(c.distancia_m || 0).toFixed(1)}m</small><br>
-                        ${c.comprimento_contato_m > 0 ? `<small>Contato: ${c.comprimento_contato_m.toFixed(1)}m</small>` : ''}
+                        <small>Distância: ${parseFloat(c.distancia_m || 0).toFixed(1)}m</small><br>
+                        ${parseFloat(c.comprimento_contato_m) > 0 ? `<small>Contato: ${parseFloat(c.comprimento_contato_m).toFixed(1)}m</small>` : ''}
                     </div>
                 `;
             });
@@ -566,7 +566,7 @@
                         <strong>${tipo === 'sobreposicao' ? '⚠️ SOBREPOSIÇÃO' : '👥 CONFRONTANTE'}</strong><br>
                         Código: ${parcela.codigo_parcela || 'N/A'}<br>
                         Proprietário: ${parcela.proprietario || 'N/A'}<br>
-                        Área: ${(parcela.area_hectares || 0).toFixed(2)} ha
+                        Área: ${parseFloat(parcela.area_hectares || 0).toFixed(2)} ha
                     `);
                 }
 

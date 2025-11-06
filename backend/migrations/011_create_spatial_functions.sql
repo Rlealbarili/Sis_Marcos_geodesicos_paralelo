@@ -27,11 +27,11 @@ BEGIN
         sp.id,
         sp.codigo_parcela,
         CASE
-            WHEN ST_Contains(sp.geometry, p.geometry) THEN 'total_propriedade_dentro'
-            WHEN ST_Contains(p.geometry, sp.geometry) THEN 'total_parcela_dentro'
-            WHEN ST_Overlaps(p.geometry, sp.geometry) THEN 'parcial'
-            WHEN ST_Touches(p.geometry, sp.geometry) THEN 'adjacente'
-            ELSE 'desconhecido'
+            WHEN ST_Contains(sp.geometry, p.geometry) THEN 'total_propriedade_dentro'::VARCHAR
+            WHEN ST_Contains(p.geometry, sp.geometry) THEN 'total_parcela_dentro'::VARCHAR
+            WHEN ST_Overlaps(p.geometry, sp.geometry) THEN 'parcial'::VARCHAR
+            WHEN ST_Touches(p.geometry, sp.geometry) THEN 'adjacente'::VARCHAR
+            ELSE 'desconhecido'::VARCHAR
         END as tipo_sobreposicao,
         ST_Area(ST_Intersection(p.geometry, sp.geometry))::DECIMAL as area_sobreposicao_m2,
         (ST_Area(ST_Intersection(p.geometry, sp.geometry)) / NULLIF(ST_Area(p.geometry), 0) * 100)::DECIMAL(5,2) as percentual_propriedade,
@@ -55,7 +55,7 @@ COMMENT ON FUNCTION analisar_sobreposicao IS 'Detecta sobreposições entre prop
 
 CREATE OR REPLACE FUNCTION identificar_confrontantes(
     propriedade_id INTEGER,
-    raio_metros DECIMAL DEFAULT 100
+    raio_metros DECIMAL DEFAULT 500
 )
 RETURNS TABLE (
     parcela_sigef_id INTEGER,
@@ -74,9 +74,9 @@ BEGIN
         sp.id,
         sp.codigo_parcela,
         CASE
-            WHEN ST_Touches(p.geometry, sp.geometry) THEN 'limite_comum'
-            WHEN ST_Distance(p.geometry, sp.geometry) <= raio_metros THEN 'proximo'
-            ELSE 'distante'
+            WHEN ST_Touches(p.geometry, sp.geometry) THEN 'limite_comum'::VARCHAR
+            WHEN ST_Distance(p.geometry, sp.geometry) <= raio_metros THEN 'proximo'::VARCHAR
+            ELSE 'distante'::VARCHAR
         END as tipo_contato,
         ST_Distance(p.geometry, sp.geometry)::DECIMAL(10,2) as distancia_m,
         CASE
