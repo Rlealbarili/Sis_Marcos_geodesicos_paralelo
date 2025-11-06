@@ -69,7 +69,84 @@ const resultado = await spatialAnalyzer.identificarConfrontantes(propriedadeId, 
 
 ## ✅ Correções Implementadas
 
-### 1. Atualizar Mapeamento de Campos (report-generator.js)
+### 1. Atualizar Interface Frontend (analise-fundiaria.html)
+
+**Arquivo:** `frontend/analise-fundiaria.html`
+**Linhas:** 470-490 (confrontantes), 444-462 (sobreposições)
+
+#### Exibição de Confrontantes
+
+```javascript
+// ✅ IMPLEMENTADO - Exibição completa de confrontantes
+confrontantes.confrontantes.slice(0, 10).forEach((c, idx) => {
+    const icon = c.tipo_contato === 'limite_comum' ? '🔗' : '📍';
+    const tipoTexto = c.tipo_contato === 'limite_comum' ? 'Limite Comum' : 'Próximo';
+    const area = c.area_ha ? parseFloat(c.area_ha).toFixed(2) + ' ha' : 'N/A';
+    const azimute = c.azimute ? parseFloat(c.azimute).toFixed(1) + '°' : 'N/A';
+
+    html += `
+        <div class="confrontante-item">
+            ${icon} <strong>Confrontante #${idx + 1}</strong><br>
+            <small><strong>Proprietário:</strong> ${c.proprietario || 'N/A'}</small><br>
+            <small><strong>Tipo:</strong> ${tipoTexto}</small><br>
+            <small><strong>Matrícula:</strong> ${c.matricula || 'N/A'}</small><br>
+            <small><strong>Município:</strong> ${c.municipio || 'N/A'}</small><br>
+            <small><strong>Área:</strong> ${area}</small><br>
+            <small><strong>Distância:</strong> ${parseFloat(c.distancia_m || 0).toFixed(1)}m</small><br>
+            ${parseFloat(c.comprimento_contato_m || 0) > 0 ? `<small><strong>Comprimento Contato:</strong> ${parseFloat(c.comprimento_contato_m).toFixed(1)}m</small><br>` : ''}
+            ${c.azimute ? `<small><strong>Azimute:</strong> ${azimute}</small><br>` : ''}
+            <small><strong>Código SIGEF:</strong> ${c.codigo_parcela ? c.codigo_parcela.substring(0, 13) + '...' : 'N/A'}</small>
+        </div>
+    `;
+});
+```
+
+**Campos Exibidos:**
+- ✅ Proprietário (nome completo)
+- ✅ Tipo de contato (formatado em português)
+- ✅ Matrícula do imóvel
+- ✅ Município
+- ✅ Área em hectares (com 2 casas decimais)
+- ✅ Distância em metros (com 1 casa decimal)
+- ✅ Comprimento de contato (quando > 0)
+- ✅ Azimute em graus (direção)
+- ✅ Código SIGEF (UUID truncado)
+
+#### Exibição de Sobreposições
+
+```javascript
+// ✅ IMPLEMENTADO - Exibição completa de sobreposições
+sobreposicoes.sobreposicoes.forEach((s, idx) => {
+    const percentual = parseFloat(s.percentual_propriedade || 0).toFixed(1);
+    const areaSobrep = parseFloat(s.area_sobreposicao_m2 || 0).toFixed(2);
+    const areaTotal = s.area_total_sigef_ha ? parseFloat(s.area_total_sigef_ha).toFixed(2) + ' ha' : 'N/A';
+    const tipoTexto = s.tipo_sobreposicao ? s.tipo_sobreposicao.replace(/_/g, ' ').toUpperCase() : 'N/A';
+
+    html += `
+        <div class="sobreposicao-item">
+            <strong>Sobreposição #${idx + 1}</strong><br>
+            <small><strong>Proprietário SIGEF:</strong> ${s.proprietario_sigef || 'N/A'}</small><br>
+            <small><strong>Tipo:</strong> ${tipoTexto}</small><br>
+            <small><strong>Matrícula:</strong> ${s.matricula_sigef || 'N/A'}</small><br>
+            <small><strong>Município:</strong> ${s.municipio_sigef || 'N/A'}</small><br>
+            <small><strong>Área Total Parcela:</strong> ${areaTotal}</small><br>
+            <small><strong>Área Sobreposição:</strong> ${areaSobrep} m² (${percentual}%)</small><br>
+            <small><strong>Código SIGEF:</strong> ${s.codigo_parcela ? s.codigo_parcela.substring(0, 13) + '...' : 'N/A'}</small>
+        </div>
+    `;
+});
+```
+
+**Campos Exibidos:**
+- ✅ Proprietário SIGEF
+- ✅ Tipo de sobreposição (PARCIAL, TOTAL, ADJACENTE, etc.)
+- ✅ Matrícula
+- ✅ Município
+- ✅ Área total da parcela
+- ✅ Área de sobreposição (m² e percentual)
+- ✅ Código SIGEF
+
+### 2. Atualizar Mapeamento de Campos (report-generator.js)
 
 **Arquivo:** `backend/report-generator.js`
 **Linhas:** 481-501
@@ -289,12 +366,24 @@ LIMIT 5;
 
 ## 📦 Arquivos Modificados
 
-1. ✅ `backend/report-generator.js`
+1. ✅ `frontend/analise-fundiaria.html`
+   - Linhas 470-490: Exibição completa de confrontantes (9 campos)
+   - Linhas 444-462: Exibição completa de sobreposições (7 campos)
+   - Adicionado parseFloat() para todos valores numéricos
+   - Formatação de tipos em português legível
+   - Labels em negrito para melhor UI/UX
+
+2. ✅ `backend/report-generator.js`
    - Linhas 481-501: Corrigido mapeamento de campos
    - Adicionado conversão `parseFloat()` para decimais
    - Adicionado tipo de contato e código SIGEF
 
-2. ✅ `backend/server-postgres.js`
+3. ✅ `backend/data-exporter.js`
+   - Linhas 28-61: Corrigido Excel export com campos SIGEF corretos
+   - Linhas 157-182: Corrigido CSV export com campos SIGEF corretos
+   - Adicionado azimute aos relatórios
+
+4. ✅ `backend/server-postgres.js`
    - Linha 1516: Endpoint PDF - Raio 100m → 500m
    - Linha 1595: Endpoint Excel - Raio 100m → 500m
    - Linha 1628: Endpoint CSV - Raio 100m → 500m
@@ -303,9 +392,33 @@ LIMIT 5;
 
 ## ✅ Resultado Final
 
-### Dados Agora Exibidos Corretamente
+### Dados Agora Exibidos Corretamente em TODOS os Locais
 
-O relatório de confrontantes agora mostra:
+#### Interface Frontend (após "Executar Análise Completa")
+
+**Confrontantes:**
+1. ✅ **Proprietário** (nome completo do cadastro SIGEF)
+2. ✅ **Tipo de contato** (Limite Comum ou Próximo)
+3. ✅ **Matrícula** do imóvel
+4. ✅ **Município**
+5. ✅ **Área** em hectares (formatada com 2 decimais)
+6. ✅ **Distância** em metros (formatada com 1 decimal)
+7. ✅ **Comprimento de contato** (quando disponível)
+8. ✅ **Azimute** (direção em graus)
+9. ✅ **Código SIGEF** (UUID truncado para visualização)
+
+**Sobreposições:**
+1. ✅ **Proprietário SIGEF**
+2. ✅ **Tipo** (PARCIAL, TOTAL, ADJACENTE)
+3. ✅ **Matrícula**
+4. ✅ **Município**
+5. ✅ **Área Total Parcela** (em hectares)
+6. ✅ **Área Sobreposição** (m² e percentual)
+7. ✅ **Código SIGEF**
+
+#### Relatórios PDF/Excel/CSV
+
+Os relatórios de confrontantes agora mostram:
 
 1. ✅ **Nome do proprietário** (do cadastro SIGEF)
 2. ✅ **Tipo de contato** (Limite Comum ou Próximo)
@@ -313,7 +426,8 @@ O relatório de confrontantes agora mostra:
 4. ✅ **Município**
 5. ✅ **Área** em hectares (formatada)
 6. ✅ **Distância** em metros (formatada)
-7. ✅ **Código SIGEF** (UUID) para rastreabilidade
+7. ✅ **Azimute** (direção em graus)
+8. ✅ **Código SIGEF** (UUID completo) para rastreabilidade
 
 ### Rastreabilidade
 
