@@ -617,15 +617,12 @@
                     `);
                 }
 
-                // Carregar parcelas SIGEF sobrepostas com dados adicionais
+                // Carregar ÁREAS DE SOBREPOSIÇÃO (apenas a geometria da interseção)
                 if (resultado.sobreposicoes?.sobreposicoes && resultado.sobreposicoes.sobreposicoes.length > 0) {
                     console.log(`⚠️  Carregando ${resultado.sobreposicoes.sobreposicoes.length} sobreposição(ões)...`);
                     for (const s of resultado.sobreposicoes.sobreposicoes) {
-                        await carregarParcelaSIGEF(s.parcela_sigef_id, 'sobreposicao', {
-                            area_sobreposicao_m2: s.area_sobreposicao_m2,
-                            percentual_propriedade: s.percentual_propriedade,
-                            tipo_sobreposicao: s.tipo_sobreposicao
-                        });
+                        // Renderizar apenas a geometria da interseção (área sobreposta)
+                        renderizarSobreposicao(s);
                     }
                 }
 
@@ -658,6 +655,75 @@
             }
         }
 
+        /**
+         * Renderiza a área de sobreposição (apenas a geometria da interseção)
+         * @param {Object} sobreposicao - Dados da sobreposição com geometria_intersecao
+         */
+        function renderizarSobreposicao(sobreposicao) {
+            try {
+                // Parse da geometria da interseção (apenas área sobreposta)
+                const geojson = typeof sobreposicao.geometria_intersecao === 'string'
+                    ? JSON.parse(sobreposicao.geometria_intersecao)
+                    : sobreposicao.geometria_intersecao;
+
+                // Estilo VERMELHO destacado para área sobreposta
+                const polygon = L.geoJSON(geojson, {
+                    style: {
+                        color: '#FF0000',        // Vermelho borda
+                        weight: 4,               // Borda grossa
+                        fillColor: '#FF0000',    // Vermelho preenchimento
+                        fillOpacity: 0.5,        // Opacidade alta para destaque
+                        dashArray: '10, 5'       // Tracejado para indicar conflito
+                    }
+                }).addTo(conflitosLayer);
+
+                // Calcular perímetro da área sobreposta
+                let perimetro = 0;
+                if (geojson.type === 'Polygon' && geojson.coordinates && geojson.coordinates[0]) {
+                    const coords = geojson.coordinates[0];
+                    for (let i = 0; i < coords.length - 1; i++) {
+                        const lat1 = coords[i][1];
+                        const lng1 = coords[i][0];
+                        const lat2 = coords[i + 1][1];
+                        const lng2 = coords[i + 1][0];
+                        perimetro += calcularDistanciaHaversine(lat1, lng1, lat2, lng2);
+                    }
+                }
+
+                // Popup detalhado da sobreposição
+                const areaHa = (parseFloat(sobreposicao.area_sobreposicao_m2) / 10000).toFixed(4);
+                const areaM2 = parseFloat(sobreposicao.area_sobreposicao_m2).toFixed(2);
+                const areaParcela = parseFloat(sobreposicao.area_parcela_ha || 0).toFixed(2);
+
+                const popupContent = `
+                    <div style="min-width: 280px;">
+                        <strong style="font-size: 14px; color: #FF0000;">⚠️ ÁREA SOBREPOSTA</strong><br>
+                        <hr style="margin: 8px 0;">
+                        <strong>📏 Medidas da Sobreposição:</strong><br>
+                        <strong>Área Sobreposta:</strong> ${areaHa} ha (${areaM2} m²)<br>
+                        <strong>Perímetro:</strong> ${perimetro.toFixed(2)} m<br>
+                        <strong>Percentual da Prop.:</strong> ${parseFloat(sobreposicao.percentual_propriedade || 0).toFixed(1)}%<br>
+                        <strong>Percentual SIGEF:</strong> ${parseFloat(sobreposicao.percentual_parcela || 0).toFixed(1)}%<br>
+                        <strong>Tipo:</strong> ${sobreposicao.tipo_sobreposicao || 'N/A'}<br>
+                        <hr style="margin: 8px 0;">
+                        <strong>📋 Dados da Parcela SIGEF:</strong><br>
+                        <strong>Proprietário:</strong> ${sobreposicao.proprietario_sigef || 'N/A'}<br>
+                        <strong>Município:</strong> ${sobreposicao.municipio_sigef || 'N/A'}<br>
+                        <strong>Área Total SIGEF:</strong> ${areaParcela} ha<br>
+                        <strong>Matrícula:</strong> ${sobreposicao.matricula_sigef || 'N/A'}<br>
+                        <strong>Situação:</strong> ${sobreposicao.situacao_parcela || 'N/A'}<br>
+                        <strong>Certificação:</strong> ${sobreposicao.data_certificacao || 'N/A'}<br>
+                        <strong>Código SIGEF:</strong> <small>${sobreposicao.codigo_parcela || 'N/A'}</small>
+                    </div>
+                `;
+
+                polygon.bindPopup(popupContent);
+
+            } catch (error) {
+                console.error('Erro ao renderizar sobreposição:', error);
+            }
+        }
+
         async function carregarParcelaSIGEF(parcelaId, tipo, dadosAdicionais = {}) {
             try {
                 const response = await fetch(`${API_BASE}/sigef/parcelas/${parcelaId}`);
@@ -668,21 +734,19 @@
                         ? JSON.parse(parcela.geometry)
                         : parcela.geometry;
 
-                    // Cores específicas: Vermelho para sobreposições, Dourado para confrontantes
-                    const cor = tipo === 'sobreposicao' ? '#FF0000' : '#FFD700';
-                    const fillOpacity = tipo === 'sobreposicao' ? 0.4 : 0.2;
-                    const weight = tipo === 'sobreposicao' ? 4 : 3;
-                    const dashArray = tipo === 'sobreposicao' ? '10, 5' : null; // Tracejado para sobreposições
+                    // Cor DOURADA para confrontantes
+                    const cor = '#FFD700';
+                    const fillOpacity = 0.2;
+                    const weight = 3;
 
                     const polygon = L.geoJSON(geojson, {
                         style: {
                             color: cor,
                             weight: weight,
                             fillColor: cor,
-                            fillOpacity: fillOpacity,
-                            dashArray: dashArray
+                            fillOpacity: fillOpacity
                         }
-                    }).addTo(tipo === 'sobreposicao' ? conflitosLayer : sigefLayer);
+                    }).addTo(sigefLayer);
 
                     // Calcular perímetro da geometria
                     let perimetro = 0;
@@ -697,13 +761,13 @@
                         }
                     }
 
-                    // Popup melhorado com perímetro e dados adicionais
+                    // Popup de confrontante
                     const area = parseFloat(parcela.area_hectares || 0).toFixed(2);
                     const perimetroFormatado = perimetro > 0 ? perimetro.toFixed(2) : 'N/A';
 
                     let popupContent = `
                         <div style="min-width: 250px;">
-                            <strong style="font-size: 14px;">${tipo === 'sobreposicao' ? '⚠️ SOBREPOSIÇÃO' : '👥 CONFRONTANTE'}</strong><br>
+                            <strong style="font-size: 14px;">👥 CONFRONTANTE</strong><br>
                             <hr style="margin: 8px 0;">
                             <strong>Proprietário:</strong> ${parcela.proprietario || 'N/A'}<br>
                             <strong>Município:</strong> ${parcela.municipio || 'N/A'}<br>
@@ -712,19 +776,8 @@
                             <strong>Matrícula:</strong> ${parcela.matricula || 'N/A'}<br>
                     `;
 
-                    // Adicionar dados específicos de sobreposição
-                    if (tipo === 'sobreposicao' && dadosAdicionais) {
-                        if (dadosAdicionais.area_sobreposicao_m2) {
-                            popupContent += `<hr style="margin: 8px 0;">
-                                <strong>Área Sobreposta:</strong> ${parseFloat(dadosAdicionais.area_sobreposicao_m2).toFixed(2)} m²<br>
-                                <strong>Percentual:</strong> ${parseFloat(dadosAdicionais.percentual_propriedade || 0).toFixed(1)}%<br>
-                                <strong>Tipo:</strong> ${dadosAdicionais.tipo_sobreposicao || 'N/A'}<br>
-                            `;
-                        }
-                    }
-
                     // Adicionar dados específicos de confrontante
-                    if (tipo === 'confrontante' && dadosAdicionais) {
+                    if (dadosAdicionais) {
                         if (dadosAdicionais.distancia_m !== undefined) {
                             popupContent += `<hr style="margin: 8px 0;">
                                 <strong>Distância:</strong> ${parseFloat(dadosAdicionais.distancia_m).toFixed(2)} m<br>
