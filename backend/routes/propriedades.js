@@ -74,7 +74,12 @@ router.get('/:id', async (req, res) => {
         const { id } = req.params;
 
         const result = await query(
-            'SELECT * FROM vw_propriedades_completa WHERE id = $1',
+            `SELECT
+                vw.*,
+                ST_AsGeoJSON(ST_Transform(p.geometry, 4326)) as geojson
+            FROM vw_propriedades_completa vw
+            LEFT JOIN propriedades p ON vw.id = p.id
+            WHERE vw.id = $1`,
             [id]
         );
 

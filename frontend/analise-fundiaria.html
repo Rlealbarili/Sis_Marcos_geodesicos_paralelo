@@ -573,7 +573,8 @@
 
                 // Carregar propriedade local
                 const propResponse = await fetch(`${API_BASE}/propriedades/${propriedadeId}`);
-                const propriedade = await propResponse.json();
+                const propData = await propResponse.json();
+                const propriedade = propData.data || propData; // Suportar ambos os formatos
 
                 let propPolygon;
                 if (propriedade.geojson) {
