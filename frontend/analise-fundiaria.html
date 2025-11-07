@@ -272,18 +272,33 @@
             <div id="map"></div>
 
             <div class="map-legend">
-                <strong style="display:block; margin-bottom:10px;">Legenda</strong>
-                <div class="legend-item">
+                <strong style="display:block; margin-bottom:10px;">🗺️ Controle de Camadas</strong>
+
+                <!-- Propriedade Local -->
+                <div class="legend-item" style="padding: 5px 0; cursor: pointer;" onclick="toggleLayer('propriedade')">
+                    <input type="checkbox" id="layer-propriedade" checked onchange="toggleLayer('propriedade')" style="margin-right: 5px;">
                     <div class="legend-color" style="background:#007bff;opacity:0.3;"></div>
-                    <span>Propriedade Local</span>
+                    <span>Propriedade Analisada</span>
                 </div>
-                <div class="legend-item">
-                    <div class="legend-color" style="background:#dc3545;opacity:0.3;"></div>
-                    <span>Sobreposição SIGEF</span>
+
+                <!-- Sobreposições -->
+                <div class="legend-item" style="padding: 5px 0; cursor: pointer;" onclick="toggleLayer('sobreposicoes')">
+                    <input type="checkbox" id="layer-sobreposicoes" checked onchange="toggleLayer('sobreposicoes')" style="margin-right: 5px;">
+                    <div class="legend-color" style="background:#FF0000;opacity:0.4;"></div>
+                    <span>Sobreposições (Vermelho)</span>
                 </div>
-                <div class="legend-item">
-                    <div class="legend-color" style="background:#28a745;opacity:0.2;"></div>
-                    <span>Confrontante</span>
+
+                <!-- Confrontantes -->
+                <div class="legend-item" style="padding: 5px 0; cursor: pointer;" onclick="toggleLayer('confrontantes')">
+                    <input type="checkbox" id="layer-confrontantes" checked onchange="toggleLayer('confrontantes')" style="margin-right: 5px;">
+                    <div class="legend-color" style="background:#FFD700;opacity:0.3;"></div>
+                    <span>Confrontantes (Dourado)</span>
+                </div>
+
+                <hr style="margin: 10px 0; border: none; border-top: 1px solid #ddd;">
+
+                <div style="font-size: 11px; color: #666; margin-top: 5px;">
+                    <strong>Dica:</strong> Clique nas camadas para mostrar/ocultar
                 </div>
             </div>
         </div>
@@ -311,6 +326,50 @@
                 console.log('✅ Mapa redimensionado para fullscreen');
             }, 100);
         }
+
+        // =====================================================
+        // CONTROLE DE CAMADAS
+        // =====================================================
+
+        function toggleLayer(layerName) {
+            const checkbox = document.getElementById(`layer-${layerName}`);
+
+            switch(layerName) {
+                case 'propriedade':
+                    if (checkbox.checked) {
+                        map.addLayer(propriedadeLayer);
+                        console.log('✅ Camada "Propriedade" ativada');
+                    } else {
+                        map.removeLayer(propriedadeLayer);
+                        console.log('❌ Camada "Propriedade" desativada');
+                    }
+                    break;
+
+                case 'sobreposicoes':
+                    if (checkbox.checked) {
+                        map.addLayer(conflitosLayer);
+                        console.log('✅ Camada "Sobreposições" ativada');
+                    } else {
+                        map.removeLayer(conflitosLayer);
+                        console.log('❌ Camada "Sobreposições" desativada');
+                    }
+                    break;
+
+                case 'confrontantes':
+                    if (checkbox.checked) {
+                        map.addLayer(sigefLayer);
+                        console.log('✅ Camada "Confrontantes" ativada');
+                    } else {
+                        map.removeLayer(sigefLayer);
+                        console.log('❌ Camada "Confrontantes" desativada');
+                    }
+                    break;
+            }
+        }
+
+        // =====================================================
+        // CARREGAMENTO DE DADOS
+        // =====================================================
 
         async function carregarPropriedades() {
             try {
@@ -505,6 +564,8 @@
 
         async function carregarNoMapa(propriedadeId, resultado) {
             try {
+                console.log('🗺️ Carregando geometrias no mapa...');
+
                 // Limpar camadas
                 propriedadeLayer.clearLayers();
                 sigefLayer.clearLayers();
@@ -514,48 +575,89 @@
                 const propResponse = await fetch(`${API_BASE}/propriedades/${propriedadeId}`);
                 const propriedade = await propResponse.json();
 
+                let propPolygon;
                 if (propriedade.geojson) {
                     const geojson = JSON.parse(propriedade.geojson);
 
-                    const propPolygon = L.geoJSON(geojson, {
+                    propPolygon = L.geoJSON(geojson, {
                         style: {
-                            color: '#007bff',
-                            weight: 3,
+                            color: '#007bff',      // Azul para propriedade principal
+                            weight: 4,
                             fillColor: '#007bff',
-                            fillOpacity: 0.2
+                            fillOpacity: 0.15
                         }
                     }).addTo(propriedadeLayer);
 
+                    // Calcular perímetro da propriedade
+                    let perimetro = 0;
+                    if (geojson.type === 'Polygon' && geojson.coordinates && geojson.coordinates[0]) {
+                        const coords = geojson.coordinates[0];
+                        for (let i = 0; i < coords.length - 1; i++) {
+                            const lat1 = coords[i][1];
+                            const lng1 = coords[i][0];
+                            const lat2 = coords[i + 1][1];
+                            const lng2 = coords[i + 1][0];
+                            perimetro += calcularDistanciaHaversine(lat1, lng1, lat2, lng2);
+                        }
+                    }
+
+                    const areaHa = (propriedade.area_m2 || propriedade.area_calculada || 0) / 10000;
+
                     propPolygon.bindPopup(`
-                        <strong>${propriedade.nome_propriedade}</strong><br>
-                        Matrícula: ${propriedade.matricula}<br>
-                        Área: ${(propriedade.area_calculada || 0).toFixed(2)} m²
+                        <div style="min-width: 250px;">
+                            <strong style="font-size: 14px; color: #007bff;">🏠 PROPRIEDADE ANALISADA</strong><br>
+                            <hr style="margin: 8px 0;">
+                            <strong>Nome:</strong> ${propriedade.nome_propriedade}<br>
+                            <strong>Matrícula:</strong> ${propriedade.matricula || 'N/A'}<br>
+                            <strong>Município:</strong> ${propriedade.municipio}<br>
+                            <strong>Área:</strong> ${areaHa.toFixed(4)} ha<br>
+                            <strong>Perímetro:</strong> ${perimetro.toFixed(2)} m
+                        </div>
                     `);
-
-                    // Ajustar zoom
-                    map.fitBounds(propPolygon.getBounds(), { padding: [50, 50] });
                 }
 
-                // Carregar parcelas SIGEF sobrepostas
-                if (resultado.sobreposicoes?.sobreposicoes) {
+                // Carregar parcelas SIGEF sobrepostas com dados adicionais
+                if (resultado.sobreposicoes?.sobreposicoes && resultado.sobreposicoes.sobreposicoes.length > 0) {
+                    console.log(`⚠️  Carregando ${resultado.sobreposicoes.sobreposicoes.length} sobreposição(ões)...`);
                     for (const s of resultado.sobreposicoes.sobreposicoes) {
-                        await carregarParcelaSIGEF(s.parcela_sigef_id, 'sobreposicao');
+                        await carregarParcelaSIGEF(s.parcela_sigef_id, 'sobreposicao', {
+                            area_sobreposicao_m2: s.area_sobreposicao_m2,
+                            percentual_propriedade: s.percentual_propriedade,
+                            tipo_sobreposicao: s.tipo_sobreposicao
+                        });
                     }
                 }
 
-                // Carregar confrontantes
-                if (resultado.confrontantes?.confrontantes) {
+                // Carregar confrontantes com dados adicionais
+                if (resultado.confrontantes?.confrontantes && resultado.confrontantes.confrontantes.length > 0) {
+                    console.log(`👥 Carregando ${resultado.confrontantes.confrontantes.length} confrontante(s)...`);
                     for (const c of resultado.confrontantes.confrontantes.slice(0, 20)) {
-                        await carregarParcelaSIGEF(c.parcela_sigef_id, 'confrontante');
+                        await carregarParcelaSIGEF(c.parcela_sigef_id, 'confrontante', {
+                            distancia_m: c.distancia_m,
+                            tipo_contato: c.tipo_contato,
+                            azimute: c.azimute,
+                            comprimento_contato_m: c.comprimento_contato_m
+                        });
                     }
                 }
+
+                // ✅ CENTRALIZAR AUTOMATICAMENTE NO MAPA
+                if (propPolygon) {
+                    console.log('🎯 Centralizando mapa na propriedade...');
+                    map.fitBounds(propPolygon.getBounds(), {
+                        padding: [100, 100],  // Padding maior para visualização completa
+                        maxZoom: 15           // Zoom máximo para não ficar muito próximo
+                    });
+                }
+
+                console.log('✅ Mapa carregado com sucesso!');
 
             } catch (error) {
-                console.error('Erro ao carregar no mapa:', error);
+                console.error('❌ Erro ao carregar no mapa:', error);
             }
         }
 
-        async function carregarParcelaSIGEF(parcelaId, tipo) {
+        async function carregarParcelaSIGEF(parcelaId, tipo, dadosAdicionais = {}) {
             try {
                 const response = await fetch(`${API_BASE}/sigef/parcelas/${parcelaId}`);
                 const parcela = await response.json();
@@ -565,28 +667,96 @@
                         ? JSON.parse(parcela.geometry)
                         : parcela.geometry;
 
-                    const cor = tipo === 'sobreposicao' ? '#dc3545' : '#28a745';
+                    // Cores específicas: Vermelho para sobreposições, Dourado para confrontantes
+                    const cor = tipo === 'sobreposicao' ? '#FF0000' : '#FFD700';
+                    const fillOpacity = tipo === 'sobreposicao' ? 0.4 : 0.2;
+                    const weight = tipo === 'sobreposicao' ? 4 : 3;
+                    const dashArray = tipo === 'sobreposicao' ? '10, 5' : null; // Tracejado para sobreposições
 
                     const polygon = L.geoJSON(geojson, {
                         style: {
                             color: cor,
-                            weight: 2,
+                            weight: weight,
                             fillColor: cor,
-                            fillOpacity: tipo === 'sobreposicao' ? 0.3 : 0.1
+                            fillOpacity: fillOpacity,
+                            dashArray: dashArray
                         }
                     }).addTo(tipo === 'sobreposicao' ? conflitosLayer : sigefLayer);
 
-                    polygon.bindPopup(`
-                        <strong>${tipo === 'sobreposicao' ? '⚠️ SOBREPOSIÇÃO' : '👥 CONFRONTANTE'}</strong><br>
-                        Código: ${parcela.codigo_parcela || 'N/A'}<br>
-                        Proprietário: ${parcela.proprietario || 'N/A'}<br>
-                        Área: ${parseFloat(parcela.area_hectares || 0).toFixed(2)} ha
-                    `);
+                    // Calcular perímetro da geometria
+                    let perimetro = 0;
+                    if (geojson.type === 'Polygon' && geojson.coordinates && geojson.coordinates[0]) {
+                        const coords = geojson.coordinates[0];
+                        for (let i = 0; i < coords.length - 1; i++) {
+                            const lat1 = coords[i][1];
+                            const lng1 = coords[i][0];
+                            const lat2 = coords[i + 1][1];
+                            const lng2 = coords[i + 1][0];
+                            perimetro += calcularDistanciaHaversine(lat1, lng1, lat2, lng2);
+                        }
+                    }
+
+                    // Popup melhorado com perímetro e dados adicionais
+                    const area = parseFloat(parcela.area_hectares || 0).toFixed(2);
+                    const perimetroFormatado = perimetro > 0 ? perimetro.toFixed(2) : 'N/A';
+
+                    let popupContent = `
+                        <div style="min-width: 250px;">
+                            <strong style="font-size: 14px;">${tipo === 'sobreposicao' ? '⚠️ SOBREPOSIÇÃO' : '👥 CONFRONTANTE'}</strong><br>
+                            <hr style="margin: 8px 0;">
+                            <strong>Proprietário:</strong> ${parcela.proprietario || 'N/A'}<br>
+                            <strong>Município:</strong> ${parcela.municipio || 'N/A'}<br>
+                            <strong>Área:</strong> ${area} ha<br>
+                            <strong>Perímetro:</strong> ${perimetroFormatado} m<br>
+                            <strong>Matrícula:</strong> ${parcela.matricula || 'N/A'}<br>
+                    `;
+
+                    // Adicionar dados específicos de sobreposição
+                    if (tipo === 'sobreposicao' && dadosAdicionais) {
+                        if (dadosAdicionais.area_sobreposicao_m2) {
+                            popupContent += `<hr style="margin: 8px 0;">
+                                <strong>Área Sobreposta:</strong> ${parseFloat(dadosAdicionais.area_sobreposicao_m2).toFixed(2)} m²<br>
+                                <strong>Percentual:</strong> ${parseFloat(dadosAdicionais.percentual_propriedade || 0).toFixed(1)}%<br>
+                                <strong>Tipo:</strong> ${dadosAdicionais.tipo_sobreposicao || 'N/A'}<br>
+                            `;
+                        }
+                    }
+
+                    // Adicionar dados específicos de confrontante
+                    if (tipo === 'confrontante' && dadosAdicionais) {
+                        if (dadosAdicionais.distancia_m !== undefined) {
+                            popupContent += `<hr style="margin: 8px 0;">
+                                <strong>Distância:</strong> ${parseFloat(dadosAdicionais.distancia_m).toFixed(2)} m<br>
+                                <strong>Tipo Contato:</strong> ${dadosAdicionais.tipo_contato === 'limite_comum' ? '🔗 Limite Comum' : '📍 Próximo'}<br>
+                            `;
+                            if (dadosAdicionais.azimute) {
+                                popupContent += `<strong>Azimute:</strong> ${parseFloat(dadosAdicionais.azimute).toFixed(1)}°<br>`;
+                            }
+                        }
+                    }
+
+                    popupContent += `<strong>Código SIGEF:</strong> <small>${parcela.codigo_parcela || 'N/A'}</small>
+                        </div>
+                    `;
+
+                    polygon.bindPopup(popupContent);
                 }
 
             } catch (error) {
                 console.error(`Erro ao carregar parcela ${parcelaId}:`, error);
             }
+        }
+
+        // Função auxiliar para calcular distância Haversine
+        function calcularDistanciaHaversine(lat1, lng1, lat2, lng2) {
+            const R = 6371000; // Raio da Terra em metros
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLng = (lng2 - lng1) * Math.PI / 180;
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                    Math.sin(dLng/2) * Math.sin(dLng/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            return R * c;
         }
 
         // =====================================================
