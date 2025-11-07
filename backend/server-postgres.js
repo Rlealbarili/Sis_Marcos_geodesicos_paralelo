@@ -918,7 +918,7 @@ app.get('/api/sigef/parcelas/:id', async (req, res) => {
                 municipio,
                 matricula,
                 situacao_parcela,
-                ST_AsGeoJSON(geometry) as geometry
+                ST_AsGeoJSON(ST_Transform(geometry, 4326)) as geometry
             FROM sigef_parcelas
             WHERE id = $1
         `, [id]);
