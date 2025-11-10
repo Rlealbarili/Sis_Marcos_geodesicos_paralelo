@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Análise Fundiária - COGEP</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
     <!-- styles.css REMOVIDO para evitar conflitos com fullscreen -->
     <style>
         * {
@@ -213,6 +214,45 @@
             <p style="font-size: 13px; color: #666; margin-bottom: 20px;">
                 Sistema de detecção de sobreposições e análise de viabilidade
             </p>
+
+            <!-- Seção de Importação Rápida -->
+            <div style="background: #f0f8ff; border: 2px solid #007bff; border-radius: 8px; padding: 15px; margin-bottom: 20px;">
+                <h3 style="margin: 0 0 10px 0; font-size: 14px; color: #007bff;">
+                    📥 Importar Nova Propriedade
+                </h3>
+                <p style="font-size: 11px; color: #666; margin-bottom: 10px;">
+                    Arraste ou clique para adicionar KML/SHP/DXF/GeoJSON
+                </p>
+
+                <div id="quickUploadArea" style="
+                    border: 2px dashed #007bff;
+                    border-radius: 8px;
+                    padding: 20px;
+                    text-align: center;
+                    background: white;
+                    cursor: pointer;
+                    transition: all 0.3s;
+                ">
+                    <i class="fas fa-cloud-upload-alt" style="font-size: 2em; color: #007bff; margin-bottom: 8px;"></i>
+                    <p style="margin: 0; font-size: 12px; color: #666;">Clique ou arraste arquivo aqui</p>
+                    <small style="font-size: 10px; color: #999;">KML, KMZ, SHP, DXF, GeoJSON</small>
+                </div>
+
+                <input type="file" id="quickFileInput" accept=".kml,.kmz,.shp,.zip,.dxf,.geojson,.json" style="display: none;">
+
+                <div id="quickFileInfo" style="display: none; margin-top: 10px; padding: 8px; background: #e8f5e9; border-radius: 5px; font-size: 11px;">
+                    <strong>📄 <span id="quickFileName"></span></strong>
+                    <button onclick="clearQuickFile()" style="float: right; background: #dc3545; color: white; border: none; padding: 2px 8px; border-radius: 3px; font-size: 10px; cursor: pointer;">✕</button>
+                </div>
+
+                <input type="text" id="quickNomePropriedade" placeholder="Nome da propriedade"
+                    style="width: 100%; padding: 8px; margin-top: 10px; border: 1px solid #ddd; border-radius: 5px; font-size: 12px;">
+
+                <button onclick="importarPropriedadeRapido()" id="quickImportBtn" class="btn btn-primary"
+                    style="width: 100%; margin-top: 8px; padding: 8px; font-size: 12px;" disabled>
+                    📥 Importar e Adicionar ao Mapa
+                </button>
+            </div>
 
             <div class="form-group">
                 <label>Selecionar Propriedade:</label>
@@ -1152,6 +1192,148 @@
                 `sobreposicoes_{id}.dxf`,
                 'Exportando Sobreposições (DXF)...'
             );
+        }
+
+        // =====================================================
+        // IMPORTAÇÃO RÁPIDA DE PROPRIEDADES
+        // =====================================================
+
+        let quickSelectedFile = null;
+
+        // Setup da área de upload rápido
+        const quickUploadArea = document.getElementById('quickUploadArea');
+        const quickFileInput = document.getElementById('quickFileInput');
+        const quickFileInfo = document.getElementById('quickFileInfo');
+        const quickFileName = document.getElementById('quickFileName');
+        const quickNomePropriedade = document.getElementById('quickNomePropriedade');
+        const quickImportBtn = document.getElementById('quickImportBtn');
+
+        // Click na área de upload
+        quickUploadArea.addEventListener('click', () => {
+            quickFileInput.click();
+        });
+
+        // Drag and drop
+        quickUploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            quickUploadArea.style.borderColor = '#0056b3';
+            quickUploadArea.style.background = '#e8f4ff';
+        });
+
+        quickUploadArea.addEventListener('dragleave', () => {
+            quickUploadArea.style.borderColor = '#007bff';
+            quickUploadArea.style.background = 'white';
+        });
+
+        quickUploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            quickUploadArea.style.borderColor = '#007bff';
+            quickUploadArea.style.background = 'white';
+
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleQuickFileSelect(files[0]);
+            }
+        });
+
+        // Seleção de arquivo
+        quickFileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleQuickFileSelect(e.target.files[0]);
+            }
+        });
+
+        function handleQuickFileSelect(file) {
+            quickSelectedFile = file;
+            quickFileName.textContent = file.name;
+            quickFileInfo.style.display = 'block';
+            quickImportBtn.disabled = false;
+
+            // Sugerir nome baseado no arquivo
+            if (!quickNomePropriedade.value) {
+                const nomeSugerido = file.name.replace(/\.(kml|kmz|shp|zip|dxf|geojson|json)$/i, '');
+                quickNomePropriedade.value = nomeSugerido;
+            }
+
+            console.log('✅ Arquivo selecionado:', file.name);
+        }
+
+        function clearQuickFile() {
+            quickSelectedFile = null;
+            quickFileInput.value = '';
+            quickFileInfo.style.display = 'none';
+            quickImportBtn.disabled = true;
+            console.log('🗑️ Arquivo removido');
+        }
+
+        async function importarPropriedadeRapido() {
+            if (!quickSelectedFile) {
+                alert('Selecione um arquivo primeiro!');
+                return;
+            }
+
+            const nomePropriedade = quickNomePropriedade.value.trim();
+            if (!nomePropriedade) {
+                alert('Digite um nome para a propriedade!');
+                quickNomePropriedade.focus();
+                return;
+            }
+
+            // Criar FormData
+            const formData = new FormData();
+            formData.append('arquivo', quickSelectedFile);
+            formData.append('nome_propriedade', nomePropriedade);
+            formData.append('cliente_id', 1);
+            formData.append('tipo', 'RURAL');
+
+            // Mostrar loading
+            mostrarLoadingOverlay('Importando propriedade...');
+            quickImportBtn.disabled = true;
+
+            try {
+                console.log('📤 Enviando arquivo para importação:', quickSelectedFile.name);
+
+                const response = await fetch(`${API_BASE}/upload-geo/upload`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                removerLoadingOverlay();
+
+                if (data.success) {
+                    console.log('✅ Propriedade importada com sucesso:', data.propriedade);
+
+                    mostrarToast(`✅ ${nomePropriedade} importada com sucesso!`, 'success');
+
+                    // Limpar formulário
+                    clearQuickFile();
+                    quickNomePropriedade.value = '';
+
+                    // Recarregar lista de propriedades
+                    await carregarPropriedades();
+
+                    // Selecionar a nova propriedade automaticamente
+                    document.getElementById('propriedadeSelect').value = data.propriedade.id;
+
+                    // Executar análise automaticamente
+                    setTimeout(() => {
+                        executarAnalise();
+                    }, 500);
+
+                } else {
+                    console.error('❌ Erro na importação:', data.message);
+                    mostrarToast('❌ Erro: ' + (data.message || 'Falha ao importar'), 'error');
+                    quickImportBtn.disabled = false;
+                }
+
+            } catch (error) {
+                console.error('❌ Erro ao importar propriedade:', error);
+                removerLoadingOverlay();
+                mostrarToast('❌ Erro ao importar: ' + error.message, 'error');
+                quickImportBtn.disabled = false;
+            }
         }
 
         // Inicialização
