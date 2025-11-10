@@ -265,6 +265,39 @@
                         </button>
                     </div>
                 </div>
+
+                <div class="resultado-section" style="border-left-color: #28a745;">
+                    <h3>🗺️ Exportar Dados Georeferenciados</h3>
+                    <p style="font-size: 12px; color: #666; margin-bottom: 10px;">
+                        Formatos compatíveis com GIS (QGIS, ArcGIS, AutoCAD)
+                    </p>
+                    <div style="display: grid; gap: 10px; margin-top: 10px;">
+                        <button onclick="exportarConfrontantesGeoJSON()" class="btn btn-primary" style="background: #28a745;">
+                            📍 Confrontantes (GeoJSON)
+                        </button>
+                        <button onclick="exportarConfrontantesKML()" class="btn btn-primary" style="background: #28a745;">
+                            🗺️ Confrontantes (KML)
+                        </button>
+                        <button onclick="exportarConfrontantesShapefile()" class="btn btn-primary" style="background: #28a745;">
+                            📦 Confrontantes (Shapefile)
+                        </button>
+                        <button onclick="exportarConfrontantesDXF()" class="btn btn-primary" style="background: #28a745;">
+                            📐 Confrontantes (DXF)
+                        </button>
+                        <button onclick="exportarSobreposicoesGeoJSON()" class="btn btn-primary" style="background: #dc3545;">
+                            ⚠️ Sobreposições (GeoJSON)
+                        </button>
+                        <button onclick="exportarSobreposicoesKML()" class="btn btn-primary" style="background: #dc3545;">
+                            ⚠️ Sobreposições (KML)
+                        </button>
+                        <button onclick="exportarSobreposicoesShapefile()" class="btn btn-primary" style="background: #dc3545;">
+                            ⚠️ Sobreposições (Shapefile)
+                        </button>
+                        <button onclick="exportarSobreposicoesDXF()" class="btn btn-primary" style="background: #dc3545;">
+                            ⚠️ Sobreposições (DXF)
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -984,6 +1017,140 @@
                 `${API_BASE}/relatorios/sobreposicoes-excel/${propriedadeId}`,
                 `sobreposicoes_{id}.xlsx`,
                 'Exportando Sobreposições para Excel...'
+            );
+        }
+
+        // =====================================================
+        // FUNÇÕES DE EXPORTAÇÃO GEOREFERENCIADA
+        // =====================================================
+
+        async function downloadGeoExport(url, nomeArquivo, mensagemLoading) {
+            const propriedadeId = obterPropriedadeIdAtual();
+            if (!propriedadeId) return;
+
+            mostrarLoadingOverlay(mensagemLoading);
+
+            try {
+                const response = await fetch(url);
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.message || `Erro ${response.status}`);
+                }
+
+                const blob = await response.blob();
+                const downloadUrl = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = downloadUrl;
+                a.download = nomeArquivo.replace('{id}', propriedadeId);
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(downloadUrl);
+
+                removerLoadingOverlay();
+                mostrarToast('✅ Arquivo exportado com sucesso!', 'success');
+
+            } catch (error) {
+                console.error('Erro ao exportar:', error);
+                removerLoadingOverlay();
+                mostrarToast('❌ ' + error.message, 'error');
+            }
+        }
+
+        // Confrontantes - GeoJSON
+        function exportarConfrontantesGeoJSON() {
+            const propriedadeId = obterPropriedadeIdAtual();
+            if (!propriedadeId) return;
+
+            downloadGeoExport(
+                `${API_BASE}/export-geo/confrontantes/${propriedadeId}/geojson`,
+                `confrontantes_{id}.geojson`,
+                'Exportando Confrontantes (GeoJSON)...'
+            );
+        }
+
+        // Confrontantes - KML
+        function exportarConfrontantesKML() {
+            const propriedadeId = obterPropriedadeIdAtual();
+            if (!propriedadeId) return;
+
+            downloadGeoExport(
+                `${API_BASE}/export-geo/confrontantes/${propriedadeId}/kml`,
+                `confrontantes_{id}.kml`,
+                'Exportando Confrontantes (KML)...'
+            );
+        }
+
+        // Confrontantes - Shapefile
+        function exportarConfrontantesShapefile() {
+            const propriedadeId = obterPropriedadeIdAtual();
+            if (!propriedadeId) return;
+
+            downloadGeoExport(
+                `${API_BASE}/export-geo/confrontantes/${propriedadeId}/shapefile`,
+                `confrontantes_{id}.zip`,
+                'Exportando Confrontantes (Shapefile)...'
+            );
+        }
+
+        // Confrontantes - DXF
+        function exportarConfrontantesDXF() {
+            const propriedadeId = obterPropriedadeIdAtual();
+            if (!propriedadeId) return;
+
+            downloadGeoExport(
+                `${API_BASE}/export-geo/confrontantes/${propriedadeId}/dxf`,
+                `confrontantes_{id}.dxf`,
+                'Exportando Confrontantes (DXF)...'
+            );
+        }
+
+        // Sobreposições - GeoJSON
+        function exportarSobreposicoesGeoJSON() {
+            const propriedadeId = obterPropriedadeIdAtual();
+            if (!propriedadeId) return;
+
+            downloadGeoExport(
+                `${API_BASE}/export-geo/sobreposicoes/${propriedadeId}/geojson`,
+                `sobreposicoes_{id}.geojson`,
+                'Exportando Sobreposições (GeoJSON)...'
+            );
+        }
+
+        // Sobreposições - KML
+        function exportarSobreposicoesKML() {
+            const propriedadeId = obterPropriedadeIdAtual();
+            if (!propriedadeId) return;
+
+            downloadGeoExport(
+                `${API_BASE}/export-geo/sobreposicoes/${propriedadeId}/kml`,
+                `sobreposicoes_{id}.kml`,
+                'Exportando Sobreposições (KML)...'
+            );
+        }
+
+        // Sobreposições - Shapefile
+        function exportarSobreposicoesShapefile() {
+            const propriedadeId = obterPropriedadeIdAtual();
+            if (!propriedadeId) return;
+
+            downloadGeoExport(
+                `${API_BASE}/export-geo/sobreposicoes/${propriedadeId}/shapefile`,
+                `sobreposicoes_{id}.zip`,
+                'Exportando Sobreposições (Shapefile)...'
+            );
+        }
+
+        // Sobreposições - DXF
+        function exportarSobreposicoesDXF() {
+            const propriedadeId = obterPropriedadeIdAtual();
+            if (!propriedadeId) return;
+
+            downloadGeoExport(
+                `${API_BASE}/export-geo/sobreposicoes/${propriedadeId}/dxf`,
+                `sobreposicoes_{id}.dxf`,
+                'Exportando Sobreposições (DXF)...'
             );
         }
 

@@ -2876,6 +2876,22 @@ app.get('/api/car/uploads/ativos', async (req, res) => {
 console.log('✅ Rotas CAR ZIP Uploader carregadas');
 
 // ============================================
+// ROTAS DE UPLOAD GEOREFERENCIADO
+// ============================================
+
+const uploadGeoRoutes = require('./routes/upload-geo');
+app.use('/api/upload-geo', uploadGeoRoutes);
+console.log('✅ Rotas de Upload Georeferenciado carregadas (KML/SHP/DXF)');
+
+// ============================================
+// ROTAS DE EXPORTAÇÃO GEOREFERENCIADA
+// ============================================
+
+const exportGeoRoutes = require('./routes/export-geo');
+app.use('/api/export-geo', exportGeoRoutes);
+console.log('✅ Rotas de Exportação Georeferenciada carregadas (KML/SHP/DXF/GeoJSON)');
+
+// ============================================
 // ERROR HANDLER
 // ============================================
 
