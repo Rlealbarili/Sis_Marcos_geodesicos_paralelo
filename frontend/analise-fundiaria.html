@@ -265,6 +265,77 @@
                 🔍 Executar Análise Completa
             </button>
 
+            <!-- Botão Download Camadas CAR -->
+            <div style="margin-top: 15px; padding: 15px; background: #f0fff4; border: 2px solid #28a745; border-radius: 8px;">
+                <h4 style="margin: 0 0 10px 0; font-size: 14px; color: #28a745;">
+                    🌾 Camadas CAR
+                </h4>
+                <button onclick="baixarCamadasCAR()" id="btnBaixarCAR" class="btn btn-primary" style="width: 100%; background: #28a745; border: none; margin-bottom: 10px;" disabled>
+                    📥 Baixar Todas as Camadas
+                </button>
+                <div id="carDownloadStatus" style="display: none; font-size: 11px; color: #666; margin-top: 5px;">
+                    ⏳ Aguardando download...
+                </div>
+            </div>
+
+            <!-- Controles de Camadas do Mapa -->
+            <div id="controlesCAR" style="display: none; margin-top: 15px; padding: 15px; background: #fff; border: 2px solid #ddd; border-radius: 8px;">
+                <h4 style="margin: 0 0 10px 0; font-size: 14px; color: #333;">
+                    🗺️ Camadas do Mapa
+                </h4>
+
+                <div style="margin-bottom: 15px;">
+                    <strong style="font-size: 12px; color: #666;">Camadas Principais:</strong>
+                    <label style="display: block; margin: 8px 0; font-size: 12px; cursor: pointer;">
+                        <input type="checkbox" id="layer-propriedade" checked onchange="toggleLayer('propriedade')">
+                        🔵 Propriedade Principal
+                    </label>
+                    <label style="display: block; margin: 8px 0; font-size: 12px; cursor: pointer;">
+                        <input type="checkbox" id="layer-confrontantes" checked onchange="toggleLayer('confrontantes')">
+                        🟡 Confrontantes
+                    </label>
+                    <label style="display: block; margin: 8px 0; font-size: 12px; cursor: pointer;">
+                        <input type="checkbox" id="layer-sigef" checked onchange="toggleLayer('sigef')">
+                        🟢 SIGEF
+                    </label>
+                    <label style="display: block; margin: 8px 0; font-size: 12px; cursor: pointer;">
+                        <input type="checkbox" id="layer-sobreposicoes" checked onchange="toggleLayer('sobreposicoes')">
+                        🔴 Sobreposições
+                    </label>
+                </div>
+
+                <hr style="margin: 15px 0; border: 1px solid #eee;">
+
+                <div>
+                    <strong style="font-size: 12px; color: #666;">Camadas CAR:</strong>
+                    <label style="display: block; margin: 8px 0; font-size: 12px; cursor: pointer;">
+                        <input type="checkbox" id="layer-uso-solo" onchange="toggleLayer('uso_solo')">
+                        🟤 Uso do Solo
+                        <span class="layer-count" style="color: #999;">(0)</span>
+                    </label>
+                    <label style="display: block; margin: 8px 0; font-size: 12px; cursor: pointer;">
+                        <input type="checkbox" id="layer-hidrografia" onchange="toggleLayer('hidrografia')">
+                        🔵 Hidrografia
+                        <span class="layer-count" style="color: #999;">(0)</span>
+                    </label>
+                    <label style="display: block; margin: 8px 0; font-size: 12px; cursor: pointer;">
+                        <input type="checkbox" id="layer-reserva-legal" onchange="toggleLayer('reserva_legal')">
+                        🟢 Reserva Legal
+                        <span class="layer-count" style="color: #999;">(0)</span>
+                    </label>
+                    <label style="display: block; margin: 8px 0; font-size: 12px; cursor: pointer;">
+                        <input type="checkbox" id="layer-vegetacao" onchange="toggleLayer('vegetacao_nativa')">
+                        🌳 Vegetação Nativa
+                        <span class="layer-count" style="color: #999;">(0)</span>
+                    </label>
+                    <label style="display: block; margin: 8px 0; font-size: 12px; cursor: pointer;">
+                        <input type="checkbox" id="layer-app" onchange="toggleLayer('app')">
+                        🛡️ APP
+                        <span class="layer-count" style="color: #999;">(0)</span>
+                    </label>
+                </div>
+            </div>
+
             <div id="resultados" style="display:none;">
                 <div class="resultado-section">
                     <h3>📊 Score de Viabilidade</h3>
@@ -380,7 +451,17 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
         let map, propriedadeLayer, sigefLayer, conflitosLayer;
+        let layerGroupsCAR = {};
         const API_BASE = 'http://localhost:3001/api';
+
+        // Paleta de cores para camadas CAR
+        const coresCAR = {
+            uso_solo: '#8B4513',         // Marrom
+            hidrografia: '#00BCD4',      // Azul Água
+            reserva_legal: '#2E7D32',    // Verde Escuro
+            vegetacao_nativa: '#66BB6A', // Verde Claro
+            app: '#FFC107'               // Amarelo
+        };
 
         function initMap() {
             map = L.map('map').setView([-25.4284, -49.2733], 12);
@@ -389,9 +470,24 @@
                 attribution: '© OpenStreetMap'
             }).addTo(map);
 
-            propriedadeLayer = L.layerGroup().addTo(map);
-            sigefLayer = L.layerGroup().addTo(map);
-            conflitosLayer = L.layerGroup().addTo(map);
+            // Inicializar layer groups (adicionados ao mapa baseado nos checkboxes)
+            propriedadeLayer = L.layerGroup();
+            sigefLayer = L.layerGroup();
+            conflitosLayer = L.layerGroup();
+
+            // Adicionar ao mapa as camadas que estão marcadas por padrão
+            propriedadeLayer.addTo(map);
+            sigefLayer.addTo(map);
+            conflitosLayer.addTo(map);
+
+            // Inicializar layer groups para CAR (não adicionados ao mapa por padrão)
+            layerGroupsCAR = {
+                uso_solo: L.layerGroup(),
+                hidrografia: L.layerGroup(),
+                reserva_legal: L.layerGroup(),
+                vegetacao_nativa: L.layerGroup(),
+                app: L.layerGroup()
+            };
 
             // Forçar redimensionamento após 100ms
             setTimeout(() => {
@@ -405,38 +501,94 @@
         // =====================================================
 
         function toggleLayer(layerName) {
-            const checkbox = document.getElementById(`layer-${layerName}`);
+            const checkbox = document.getElementById(`layer-${layerName.replace('_', '-')}`);
+
+            if (!checkbox) {
+                console.warn(`⚠️  Checkbox não encontrado para camada: ${layerName}`);
+                return;
+            }
 
             switch(layerName) {
                 case 'propriedade':
-                    if (checkbox.checked) {
-                        map.addLayer(propriedadeLayer);
-                        console.log('✅ Camada "Propriedade" ativada');
-                    } else {
-                        map.removeLayer(propriedadeLayer);
-                        console.log('❌ Camada "Propriedade" desativada');
+                    if (!propriedadeLayer) {
+                        console.warn('⚠️  propriedadeLayer não inicializada');
+                        return;
                     }
-                    break;
-
-                case 'sobreposicoes':
                     if (checkbox.checked) {
-                        map.addLayer(conflitosLayer);
-                        console.log('✅ Camada "Sobreposições" ativada');
+                        if (!map.hasLayer(propriedadeLayer)) {
+                            propriedadeLayer.addTo(map);
+                            console.log('✅ Camada "Propriedade" ativada');
+                        }
                     } else {
-                        map.removeLayer(conflitosLayer);
-                        console.log('❌ Camada "Sobreposições" desativada');
+                        if (map.hasLayer(propriedadeLayer)) {
+                            map.removeLayer(propriedadeLayer);
+                            console.log('❌ Camada "Propriedade" desativada');
+                        }
                     }
                     break;
 
                 case 'confrontantes':
+                case 'sigef':
+                    if (!sigefLayer) {
+                        console.warn('⚠️  sigefLayer não inicializada');
+                        return;
+                    }
                     if (checkbox.checked) {
-                        map.addLayer(sigefLayer);
-                        console.log('✅ Camada "Confrontantes" ativada');
+                        if (!map.hasLayer(sigefLayer)) {
+                            sigefLayer.addTo(map);
+                            console.log('✅ Camada "Confrontantes/SIGEF" ativada');
+                        }
                     } else {
-                        map.removeLayer(sigefLayer);
-                        console.log('❌ Camada "Confrontantes" desativada');
+                        if (map.hasLayer(sigefLayer)) {
+                            map.removeLayer(sigefLayer);
+                            console.log('❌ Camada "Confrontantes/SIGEF" desativada');
+                        }
                     }
                     break;
+
+                case 'sobreposicoes':
+                    if (!conflitosLayer) {
+                        console.warn('⚠️  conflitosLayer não inicializada');
+                        return;
+                    }
+                    if (checkbox.checked) {
+                        if (!map.hasLayer(conflitosLayer)) {
+                            conflitosLayer.addTo(map);
+                            console.log('✅ Camada "Sobreposições" ativada');
+                        }
+                    } else {
+                        if (map.hasLayer(conflitosLayer)) {
+                            map.removeLayer(conflitosLayer);
+                            console.log('❌ Camada "Sobreposições" desativada');
+                        }
+                    }
+                    break;
+
+                // Camadas CAR
+                case 'uso_solo':
+                case 'hidrografia':
+                case 'reserva_legal':
+                case 'vegetacao_nativa':
+                case 'app':
+                    if (layerGroupsCAR[layerName]) {
+                        if (checkbox.checked) {
+                            if (!map.hasLayer(layerGroupsCAR[layerName])) {
+                                layerGroupsCAR[layerName].addTo(map);
+                                console.log(`✅ Camada CAR "${layerName}" ativada`);
+                            }
+                        } else {
+                            if (map.hasLayer(layerGroupsCAR[layerName])) {
+                                map.removeLayer(layerGroupsCAR[layerName]);
+                                console.log(`❌ Camada CAR "${layerName}" desativada`);
+                            }
+                        }
+                    } else {
+                        console.warn(`⚠️  Camada CAR "${layerName}" não inicializada`);
+                    }
+                    break;
+
+                default:
+                    console.warn(`⚠️  Camada desconhecida: ${layerName}`);
             }
         }
 
@@ -604,26 +756,46 @@
                 return;
             }
 
-            let html = `<p><strong>👥 ${confrontantes.total_confrontantes} confrontante(s) identificado(s)</strong></p>`;
+            // Totais por fonte
+            const totalSIGEF = confrontantes.total_sigef || 0;
+            const totalCAR = confrontantes.total_car || 0;
+
+            let html = `
+                <p><strong>👥 ${confrontantes.total_confrontantes} confrontante(s) identificado(s)</strong></p>
+                <p style="font-size: 12px; margin-top: -8px;">
+                    <span style="color: #FFD700;">🏢 SIGEF: ${totalSIGEF}</span> |
+                    <span style="color: #00FF00;">🌾 CAR: ${totalCAR}</span>
+                </p>
+            `;
 
             confrontantes.confrontantes.slice(0, 10).forEach((c, idx) => {
-                const icon = c.tipo_contato === 'limite_comum' ? '🔗' : '📍';
-                const tipoTexto = c.tipo_contato === 'limite_comum' ? 'Limite Comum' : 'Próximo';
+                const isSIGEF = !c.fonte || c.fonte === 'SIGEF';
+                const isCAR = c.fonte === 'CAR';
+
+                const icon = isSIGEF ? (c.tipo_contato === 'limite_comum' ? '🔗' : '📍') : '🌾';
+                const iconColor = isSIGEF ? '#FFD700' : '#00FF00';
+                const fonteLabel = isSIGEF ? 'SIGEF' : 'CAR';
+
+                const tipoTexto = isSIGEF
+                    ? (c.tipo_contato === 'limite_comum' ? 'Limite Comum' : 'Próximo')
+                    : c.tipo_confrontacao || 'Próximo';
+
                 const area = c.area_ha ? parseFloat(c.area_ha).toFixed(2) + ' ha' : 'N/A';
-                const azimute = c.azimute ? parseFloat(c.azimute).toFixed(1) + '°' : 'N/A';
+                const azimute = (c.azimute || c.azimute_graus) ? parseFloat(c.azimute || c.azimute_graus).toFixed(1) + '°' : 'N/A';
 
                 html += `
-                    <div class="confrontante-item">
-                        ${icon} <strong>Confrontante #${idx + 1}</strong><br>
-                        <small><strong>Proprietário:</strong> ${c.proprietario || 'N/A'}</small><br>
+                    <div class="confrontante-item" style="border-left: 3px solid ${iconColor};">
+                        ${icon} <strong style="color: ${iconColor};">Confrontante #${idx + 1} [${fonteLabel}]</strong><br>
+                        <small><strong>Proprietário:</strong> ${c.proprietario || c.nome_proprietario || 'N/A'}</small><br>
                         <small><strong>Tipo:</strong> ${tipoTexto}</small><br>
-                        <small><strong>Matrícula:</strong> ${c.matricula || 'N/A'}</small><br>
+                        ${isSIGEF && c.matricula ? `<small><strong>Matrícula:</strong> ${c.matricula}</small><br>` : ''}
+                        ${isCAR && c.codigo_car ? `<small><strong>Código CAR:</strong> ${c.codigo_car.substring(0, 20)}...</small><br>` : ''}
                         <small><strong>Município:</strong> ${c.municipio || 'N/A'}</small><br>
                         <small><strong>Área:</strong> ${area}</small><br>
                         <small><strong>Distância:</strong> ${parseFloat(c.distancia_m || 0).toFixed(1)}m</small><br>
-                        ${parseFloat(c.comprimento_contato_m || 0) > 0 ? `<small><strong>Comprimento Contato:</strong> ${parseFloat(c.comprimento_contato_m).toFixed(1)}m</small><br>` : ''}
-                        ${c.azimute ? `<small><strong>Azimute:</strong> ${azimute}</small><br>` : ''}
-                        <small><strong>Código SIGEF:</strong> ${c.codigo_parcela ? c.codigo_parcela.substring(0, 13) + '...' : 'N/A'}</small>
+                        ${isSIGEF && parseFloat(c.comprimento_contato_m || 0) > 0 ? `<small><strong>Comprimento Contato:</strong> ${parseFloat(c.comprimento_contato_m).toFixed(1)}m</small><br>` : ''}
+                        ${c.azimute || c.azimute_graus ? `<small><strong>Azimute:</strong> ${azimute}</small><br>` : ''}
+                        ${isSIGEF && c.codigo_parcela ? `<small><strong>Código SIGEF:</strong> ${c.codigo_parcela.substring(0, 13)}...</small>` : ''}
                     </div>
                 `;
             });
@@ -702,12 +874,30 @@
                 // Carregar confrontantes com dados adicionais
                 if (resultado.confrontantes?.confrontantes && resultado.confrontantes.confrontantes.length > 0) {
                     console.log(`👥 Carregando ${resultado.confrontantes.confrontantes.length} confrontante(s)...`);
-                    for (const c of resultado.confrontantes.confrontantes.slice(0, 20)) {
+
+                    // Separar confrontantes SIGEF e CAR
+                    const confrontantesSIGEF = resultado.confrontantes.confrontantes.filter(c => !c.fonte || c.fonte === 'SIGEF');
+                    const confrontantesCAR = resultado.confrontantes.confrontantes.filter(c => c.fonte === 'CAR');
+
+                    console.log(`   📊 SIGEF: ${confrontantesSIGEF.length} | CAR: ${confrontantesCAR.length}`);
+
+                    // Carregar confrontantes SIGEF (limite 20)
+                    for (const c of confrontantesSIGEF.slice(0, 20)) {
                         await carregarParcelaSIGEF(c.parcela_sigef_id, 'confrontante', {
                             distancia_m: c.distancia_m,
                             tipo_contato: c.tipo_contato,
                             azimute: c.azimute,
                             comprimento_contato_m: c.comprimento_contato_m
+                        });
+                    }
+
+                    // Carregar confrontantes CAR (limite 20)
+                    for (const c of confrontantesCAR.slice(0, 20)) {
+                        await carregarImovelCAR(c.codigo_car, {
+                            distancia_m: c.distancia_m,
+                            municipio: c.municipio,
+                            area_ha: c.area_ha,
+                            tipo_confrontacao: c.tipo_confrontacao
                         });
                     }
                 }
@@ -807,7 +997,7 @@
                         ? JSON.parse(parcela.geometry)
                         : parcela.geometry;
 
-                    // Cor DOURADA para confrontantes
+                    // Cor DOURADA para confrontantes SIGEF
                     const cor = '#FFD700';
                     const fillOpacity = 0.2;
                     const weight = 3;
@@ -834,13 +1024,13 @@
                         }
                     }
 
-                    // Popup de confrontante
+                    // Popup de confrontante SIGEF
                     const area = parseFloat(parcela.area_hectares || 0).toFixed(2);
                     const perimetroFormatado = perimetro > 0 ? perimetro.toFixed(2) : 'N/A';
 
                     let popupContent = `
                         <div style="min-width: 250px;">
-                            <strong style="font-size: 14px;">👥 CONFRONTANTE</strong><br>
+                            <strong style="font-size: 14px; color: #FFD700;">👥 CONFRONTANTE SIGEF</strong><br>
                             <hr style="margin: 8px 0;">
                             <strong>Proprietário:</strong> ${parcela.proprietario || 'N/A'}<br>
                             <strong>Município:</strong> ${parcela.municipio || 'N/A'}<br>
@@ -870,7 +1060,87 @@
                 }
 
             } catch (error) {
-                console.error(`Erro ao carregar parcela ${parcelaId}:`, error);
+                console.error(`Erro ao carregar parcela SIGEF ${parcelaId}:`, error);
+            }
+        }
+
+        /**
+         * Carrega imóvel CAR no mapa (confrontante)
+         */
+        async function carregarImovelCAR(codigoCAR, dadosAdicionais = {}) {
+            try {
+                const response = await fetch(`${API_BASE}/car/geometry/${encodeURIComponent(codigoCAR)}`);
+                const imovel = await response.json();
+
+                if (!imovel.success) {
+                    console.warn(`CAR não encontrado: ${codigoCAR}`);
+                    return;
+                }
+
+                if (imovel.geometry) {
+                    const geojson = typeof imovel.geometry === 'string'
+                        ? JSON.parse(imovel.geometry)
+                        : imovel.geometry;
+
+                    // Cor VERDE para confrontantes CAR
+                    const cor = '#00FF00';
+                    const fillOpacity = 0.2;
+                    const weight = 3;
+
+                    const polygon = L.geoJSON(geojson, {
+                        style: {
+                            color: cor,
+                            weight: weight,
+                            fillColor: cor,
+                            fillOpacity: fillOpacity
+                        }
+                    }).addTo(sigefLayer); // Adicionar à mesma camada de confrontantes
+
+                    // Calcular perímetro da geometria
+                    let perimetro = 0;
+                    if (geojson.type === 'Polygon' && geojson.coordinates && geojson.coordinates[0]) {
+                        const coords = geojson.coordinates[0];
+                        for (let i = 0; i < coords.length - 1; i++) {
+                            const lat1 = coords[i][1];
+                            const lng1 = coords[i][0];
+                            const lat2 = coords[i + 1][1];
+                            const lng2 = coords[i + 1][0];
+                            perimetro += calcularDistanciaHaversine(lat1, lng1, lat2, lng2);
+                        }
+                    }
+
+                    // Popup de confrontante CAR
+                    const area = parseFloat(imovel.area_ha || dadosAdicionais.area_ha || 0).toFixed(2);
+                    const perimetroFormatado = perimetro > 0 ? perimetro.toFixed(2) : 'N/A';
+
+                    let popupContent = `
+                        <div style="min-width: 250px;">
+                            <strong style="font-size: 14px; color: #00FF00;">🌾 CONFRONTANTE CAR</strong><br>
+                            <hr style="margin: 8px 0;">
+                            <strong>Código CAR:</strong> ${imovel.codigo_car}<br>
+                            <strong>Município:</strong> ${imovel.municipio || dadosAdicionais.municipio || 'N/A'}<br>
+                            <strong>Área:</strong> ${area} ha<br>
+                            <strong>Perímetro:</strong> ${perimetroFormatado} m<br>
+                            <strong>Situação:</strong> ${imovel.situacao || 'Ativo'}<br>
+                    `;
+
+                    // Adicionar dados específicos de confrontante
+                    if (dadosAdicionais) {
+                        if (dadosAdicionais.distancia_m !== undefined) {
+                            popupContent += `<hr style="margin: 8px 0;">
+                                <strong>Distância:</strong> ${parseFloat(dadosAdicionais.distancia_m).toFixed(2)} m<br>
+                                <strong>Tipo:</strong> ${dadosAdicionais.tipo_confrontacao || 'Próximo'}<br>
+                            `;
+                        }
+                    }
+
+                    popupContent += `</div>`;
+
+                    polygon.bindPopup(popupContent);
+                }
+
+            } catch (error) {
+                console.error(`Erro ao carregar imóvel CAR ${codigoCAR}:`, error);
             }
         }
 
@@ -1335,6 +1605,239 @@
                 quickImportBtn.disabled = false;
             }
         }
+
+        // =====================================================
+        // CAMADAS CAR - DOWNLOAD E VISUALIZAÇÃO
+        // =====================================================
+
+        async function baixarCamadasCAR() {
+            const propriedadeId = document.getElementById('propriedadeSelect').value;
+
+            if (!propriedadeId) {
+                mostrarToast('❌ Selecione uma propriedade primeiro', 'error');
+                return;
+            }
+
+            const btnBaixarCAR = document.getElementById('btnBaixarCAR');
+            const statusDiv = document.getElementById('carDownloadStatus');
+
+            try {
+                btnBaixarCAR.disabled = true;
+                btnBaixarCAR.textContent = '⏳ Baixando via GeoPR...';
+                statusDiv.style.display = 'block';
+                statusDiv.textContent = '⏳ Conectando ao GeoPR (IAT-PR)...';
+
+                console.log(`🌾 Iniciando download GeoPR para propriedade ${propriedadeId}`);
+
+                // MUDANÇA: Usar novo endpoint que baixa direto do GeoPR
+                const response = await fetch(`${API_BASE}/car/baixar-geopr/${propriedadeId}`);
+                const data = await response.json();
+
+                if (data.success) {
+                    console.log('✅ Download concluído:', data);
+
+                    if (data.imoveis_baixados > 0) {
+                        mostrarToast(
+                            `✅ ${data.imoveis_baixados} imóveis CAR baixados de ${data.confrontantes_processados} confrontantes!`,
+                            'success'
+                        );
+
+                        // Mostrar controles de camadas
+                        document.getElementById('controlesCAR').style.display = 'block';
+
+                        // Carregar e exibir no mapa
+                        await carregarCamadasNoMapa(propriedadeId);
+
+                        statusDiv.style.display = 'none';
+                        btnBaixarCAR.textContent = '✅ Camadas Baixadas';
+                    } else {
+                        mostrarToast('⚠️ Nenhum imóvel CAR encontrado para os confrontantes', 'warning');
+                        btnBaixarCAR.textContent = '📥 Baixar Todas as Camadas';
+                        btnBaixarCAR.disabled = false;
+                        statusDiv.style.display = 'none';
+                    }
+
+                } else {
+                    throw new Error(data.message || 'Erro ao baixar camadas');
+                }
+
+            } catch (error) {
+                console.error('❌ Erro ao baixar camadas CAR:', error);
+                mostrarToast('❌ Erro: ' + error.message, 'error');
+                btnBaixarCAR.disabled = false;
+                btnBaixarCAR.textContent = '📥 Baixar Todas as Camadas';
+                statusDiv.style.display = 'none';
+            }
+        }
+
+        async function carregarCamadasNoMapa(propriedadeId) {
+            try {
+                console.log('🗺️ Carregando camadas CAR no mapa...');
+
+                const response = await fetch(`${API_BASE}/car/camadas/${propriedadeId}`);
+                const data = await response.json();
+
+                if (!data.success) {
+                    throw new Error(data.message || 'Erro ao carregar camadas');
+                }
+
+                console.log('✅ Camadas carregadas:', data.totais_por_tipo);
+
+                // Limpar camadas antigas
+                Object.values(layerGroupsCAR).forEach(layer => layer.clearLayers());
+
+                // Adicionar Áreas de Imóveis CAR (Confrontantes)
+                let totalImoveis = 0;
+
+                // Buscar todas as camadas e somar AREA_IMOVEL + outras
+                Object.entries(data.camadas).forEach(([tipo, featureCollection]) => {
+                    if (featureCollection.features && featureCollection.features.length > 0) {
+                        featureCollection.features.forEach(feature => {
+                            if (feature.properties.tipo_camada === 'AREA_IMOVEL') {
+                                // Adicionar imóvel com estilo específico
+                                L.geoJSON(feature, {
+                                    style: {
+                                        color: '#FFD700', // Dourado para imóveis CAR
+                                        weight: 2,
+                                        fillOpacity: 0.2,
+                                        dashArray: '5, 5'
+                                    },
+                                    onEachFeature: (f, layer) => {
+                                        layer.bindPopup(`
+                                            <strong>🌾 Imóvel CAR</strong><br>
+                                            <strong>Código CAR:</strong> ${f.properties.codigo_car}<br>
+                                            <strong>Nome:</strong> ${f.properties.nome_camada || 'N/A'}<br>
+                                            <strong>Área:</strong> ${f.properties.area_ha ? f.properties.area_ha.toFixed(2) + ' ha' : 'N/A'}<br>
+                                            <strong>Fonte:</strong> ${f.properties.fonte || 'GeoPR'}
+                                        `);
+                                    }
+                                }).addTo(layerGroupsCAR.uso_solo); // Usar grupo uso_solo para imóveis
+
+                                totalImoveis++;
+                            }
+                        });
+                    }
+                });
+
+                // Atualizar contador
+                if (totalImoveis > 0) {
+                    document.querySelector('#layer-uso-solo .layer-count').textContent = `(${totalImoveis})`;
+
+                    // Ativar checkbox automaticamente
+                    document.getElementById('layer-uso-solo').checked = true;
+                    map.addLayer(layerGroupsCAR.uso_solo);
+                }
+
+                console.log(`✅ ${totalImoveis} imóveis CAR adicionados ao mapa`);
+
+                // Adicionar Uso do Solo
+                if (data.camadas.uso_solo.features.length > 0) {
+                    L.geoJSON(data.camadas.uso_solo, {
+                        style: {
+                            color: coresCAR.uso_solo,
+                            weight: 2,
+                            fillOpacity: 0.3
+                        },
+                        onEachFeature: (feature, layer) => {
+                            layer.bindPopup(`
+                                <strong>🟤 Uso do Solo</strong><br>
+                                <strong>CAR:</strong> ${feature.properties.codigo_car}<br>
+                                <strong>Nome:</strong> ${feature.properties.nome_camada || 'N/A'}<br>
+                                <strong>Área:</strong> ${feature.properties.area_ha.toFixed(2)} ha
+                            `);
+                        }
+                    }).addTo(layerGroupsCAR.uso_solo);
+                }
+
+                // Adicionar Hidrografia
+                if (data.camadas.hidrografia.features.length > 0) {
+                    L.geoJSON(data.camadas.hidrografia, {
+                        style: {
+                            color: coresCAR.hidrografia,
+                            weight: 3,
+                            fillOpacity: 0.5
+                        },
+                        onEachFeature: (feature, layer) => {
+                            layer.bindPopup(`
+                                <strong>🔵 Hidrografia</strong><br>
+                                <strong>CAR:</strong> ${feature.properties.codigo_car}<br>
+                                <strong>Nome:</strong> ${feature.properties.nome_camada || 'N/A'}<br>
+                                <strong>Área:</strong> ${feature.properties.area_ha.toFixed(2)} ha
+                            `);
+                        }
+                    }).addTo(layerGroupsCAR.hidrografia);
+                }
+
+                // Adicionar Reserva Legal
+                if (data.camadas.reserva_legal.features.length > 0) {
+                    L.geoJSON(data.camadas.reserva_legal, {
+                        style: {
+                            color: coresCAR.reserva_legal,
+                            weight: 2,
+                            fillOpacity: 0.4
+                        },
+                        onEachFeature: (feature, layer) => {
+                            layer.bindPopup(`
+                                <strong>🟢 Reserva Legal</strong><br>
+                                <strong>CAR:</strong> ${feature.properties.codigo_car}<br>
+                                <strong>Nome:</strong> ${feature.properties.nome_camada || 'N/A'}<br>
+                                <strong>Área:</strong> ${feature.properties.area_ha.toFixed(2)} ha
+                            `);
+                        }
+                    }).addTo(layerGroupsCAR.reserva_legal);
+                }
+
+                // Adicionar Vegetação Nativa
+                if (data.camadas.vegetacao_nativa.features.length > 0) {
+                    L.geoJSON(data.camadas.vegetacao_nativa, {
+                        style: {
+                            color: coresCAR.vegetacao_nativa,
+                            weight: 2,
+                            fillOpacity: 0.3
+                        },
+                        onEachFeature: (feature, layer) => {
+                            layer.bindPopup(`
+                                <strong>🌳 Vegetação Nativa</strong><br>
+                                <strong>CAR:</strong> ${feature.properties.codigo_car}<br>
+                                <strong>Nome:</strong> ${feature.properties.nome_camada || 'N/A'}<br>
+                                <strong>Área:</strong> ${feature.properties.area_ha.toFixed(2)} ha
+                            `);
+                        }
+                    }).addTo(layerGroupsCAR.vegetacao_nativa);
+                }
+
+                // Adicionar APP
+                if (data.camadas.app.features.length > 0) {
+                    L.geoJSON(data.camadas.app, {
+                        style: {
+                            color: coresCAR.app,
+                            weight: 2,
+                            fillOpacity: 0.4
+                        },
+                        onEachFeature: (feature, layer) => {
+                            layer.bindPopup(`
+                                <strong>🛡️ APP</strong><br>
+                                <strong>CAR:</strong> ${feature.properties.codigo_car}<br>
+                                <strong>Nome:</strong> ${feature.properties.nome_camada || 'N/A'}<br>
+                                <strong>Área:</strong> ${feature.properties.area_ha.toFixed(2)} ha
+                            `);
+                        }
+                    }).addTo(layerGroupsCAR.app);
+                }
+
+                console.log('✅ Todas as camadas CAR adicionadas ao mapa');
+
+            } catch (error) {
+                console.error('❌ Erro ao carregar camadas no mapa:', error);
+                mostrarToast('❌ Erro ao carregar camadas: ' + error.message, 'error');
+            }
+        }
+
+        // Habilitar botão CAR quando propriedade for selecionada
+        document.getElementById('propriedadeSelect').addEventListener('change', function() {
+            const btnBaixarCAR = document.getElementById('btnBaixarCAR');
+            btnBaixarCAR.disabled = !this.value;
+        });
 
         // Inicialização
         initMap();

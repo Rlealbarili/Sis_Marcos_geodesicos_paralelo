@@ -6,6 +6,7 @@ const fs = require('fs');
 require('dotenv').config({ path: './backend/.env', override: true });
 const { query, transaction, healthCheck, pool } = require('./database/postgres-connection');
 const SIGEFDownloader = require('./sigef-downloader');
+const CARPRDownloader = require('./car-pr-downloader');
 const SpatialAnalyzer = require('./spatial-analyzer');
 const ReportGenerator = require('./report-generator');
 const DataExporter = require('./data-exporter');
@@ -67,13 +68,16 @@ app.get('/api/estatisticas', async (req, res) => {
         const result = await query(`
             SELECT
                 COUNT(*) as total_marcos,
-                COUNT(CASE WHEN geom IS NOT NULL THEN 1 END) as marcos_levantados,
-                COUNT(CASE WHEN geom IS NULL THEN 1 END) as marcos_pendentes,
+                COUNT(CASE WHEN validado = true AND geometry IS NOT NULL THEN 1 END) as marcos_levantados,
+                COUNT(CASE WHEN validado = false OR geometry IS NULL THEN 1 END) as marcos_pendentes,
                 COUNT(CASE WHEN tipo = 'V' THEN 1 END) as tipo_v,
                 COUNT(CASE WHEN tipo = 'M' THEN 1 END) as tipo_m,
                 COUNT(CASE WHEN tipo = 'P' THEN 1 END) as tipo_p,
+                COUNT(CASE WHEN tipo = 'V' AND validado = true THEN 1 END) as tipo_v_validados,
+                COUNT(CASE WHEN tipo = 'M' AND validado = true THEN 1 END) as tipo_m_validados,
+                COUNT(CASE WHEN tipo = 'P' AND validado = true THEN 1 END) as tipo_p_validados,
                 ROUND(
-                    (COUNT(CASE WHEN geom IS NOT NULL THEN 1 END)::NUMERIC /
+                    (COUNT(CASE WHEN validado = true AND geometry IS NOT NULL THEN 1 END)::NUMERIC /
                     NULLIF(COUNT(*)::NUMERIC, 0) * 100), 2
                 ) as percentual_levantados
             FROM marcos_levantados
@@ -89,6 +93,11 @@ app.get('/api/estatisticas', async (req, res) => {
                 V: parseInt(stats.tipo_v),
                 M: parseInt(stats.tipo_m),
                 P: parseInt(stats.tipo_p)
+            },
+            por_tipo_validados: {
+                V: parseInt(stats.tipo_v_validados),
+                M: parseInt(stats.tipo_m_validados),
+                P: parseInt(stats.tipo_p_validados)
             },
             percentual_levantados: parseFloat(stats.percentual_levantados)
         });
@@ -110,19 +119,21 @@ app.get('/api/marcos', async (req, res) => {
 
         let whereClause = '1=1';
         if (levantados) {
-            whereClause = 'geom IS NOT NULL';
+            whereClause = 'validado = true AND geometry IS NOT NULL';
         }
 
         const result = await query(`
             SELECT
-                id, codigo, tipo, municipio, estado,
+                id, codigo, tipo, localizacao,
                 coordenada_e, coordenada_n, altitude,
-                latitude, longitude,
-                ST_AsGeoJSON(geom)::json as geojson,
-                data_levantamento, metodo,
-                precisao_horizontal, precisao_vertical,
-                observacoes, status,
-                criado_em, atualizado_em
+                -- Converter UTM (EPSG:31982) para Lat/Lon (EPSG:4326)
+                ST_Y(ST_Transform(geometry, 4326)) as latitude,
+                ST_X(ST_Transform(geometry, 4326)) as longitude,
+                ST_AsGeoJSON(ST_Transform(geometry, 4326))::json as geojson,
+                data_levantamento, metodo, limites,
+                precisao_e, precisao_n, precisao_h,
+                validado, fonte, observacoes,
+                created_at, updated_at
             FROM marcos_levantados
             WHERE ${whereClause}
             ORDER BY codigo
@@ -132,8 +143,8 @@ app.get('/api/marcos', async (req, res) => {
         const countResult = await query(`
             SELECT
                 COUNT(*) as total,
-                COUNT(CASE WHEN geom IS NOT NULL THEN 1 END) as levantados,
-                COUNT(CASE WHEN geom IS NULL THEN 1 END) as pendentes
+                COUNT(CASE WHEN validado = true AND geometry IS NOT NULL THEN 1 END) as levantados,
+                COUNT(CASE WHEN validado = false OR geometry IS NULL THEN 1 END) as pendentes
             FROM marcos_levantados
         `);
 
@@ -167,25 +178,26 @@ app.get('/api/marcos/raio/:lat/:lng/:raio', async (req, res) => {
 
         const result = await query(`
             SELECT
-                codigo, tipo, municipio,
-                latitude, longitude,
-                ST_AsGeoJSON(geom)::json as geojson,
+                codigo, tipo, localizacao,
+                ST_Y(ST_Transform(geometry, 4326)) as latitude,
+                ST_X(ST_Transform(geometry, 4326)) as longitude,
+                ST_AsGeoJSON(ST_Transform(geometry, 4326))::json as geojson,
                 ROUND(
                     ST_Distance(
-                        geom::geography,
+                        ST_Transform(geometry, 4326)::geography,
                         ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography
                     )::numeric,
                     2
                 ) as distancia_metros
             FROM marcos_levantados
-            WHERE geom IS NOT NULL
+            WHERE validado = true AND geometry IS NOT NULL
               AND ST_DWithin(
-                  geom::geography,
+                  ST_Transform(geometry, 4326)::geography,
                   ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography,
                   $3
               )
             ORDER BY ST_Distance(
-                geom::geography,
+                ST_Transform(geometry, 4326)::geography,
                 ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography
             )
         `, [lat, lng, raio]);
@@ -216,14 +228,15 @@ app.get('/api/marcos/bbox', async (req, res) => {
 
         const result = await query(`
             SELECT
-                codigo, tipo, municipio,
-                latitude, longitude,
-                ST_AsGeoJSON(geom)::json as geojson
+                codigo, tipo, localizacao,
+                ST_Y(ST_Transform(geometry, 4326)) as latitude,
+                ST_X(ST_Transform(geometry, 4326)) as longitude,
+                ST_AsGeoJSON(ST_Transform(geometry, 4326))::json as geojson
             FROM marcos_levantados
-            WHERE geom IS NOT NULL
+            WHERE validado = true AND geometry IS NOT NULL
               AND ST_Contains(
                   ST_MakeEnvelope($1, $2, $3, $4, 4326),
-                  geom
+                  ST_Transform(geometry, 4326)
               )
             ORDER BY codigo
         `, [parseFloat(minLng), parseFloat(minLat), parseFloat(maxLng), parseFloat(maxLat)]);
@@ -246,12 +259,12 @@ app.get('/api/marcos/bbox', async (req, res) => {
 app.get('/api/marcos/geojson', async (req, res) => {
     try {
         const limite = Math.min(parseInt(req.query.limite) || 1000, 10000);
-        const incluirNaoLevantados = req.query.incluir_nao_levantados === 'true';
+        const incluirNaoValidados = req.query.incluir_nao_validados === 'true';
 
         // Construir condição WHERE dinamicamente
-        const whereClause = incluirNaoLevantados ?
+        const whereClause = incluirNaoValidados ?
             '1=1' :  // Incluir todos os marcos
-            'geom IS NOT NULL';  // Apenas levantados
+            'validado = true AND geometry IS NOT NULL';  // Apenas validados
 
         const result = await query(`
             SELECT
@@ -260,14 +273,15 @@ app.get('/api/marcos/geojson', async (req, res) => {
                     'features', jsonb_agg(
                         jsonb_build_object(
                             'type', 'Feature',
-                            'geometry', ST_AsGeoJSON(geom)::jsonb,
+                            'geometry', ST_AsGeoJSON(ST_Transform(geometry, 4326))::jsonb,
                             'properties', jsonb_build_object(
                                 'codigo', codigo,
                                 'tipo', tipo,
-                                'municipio', municipio,
-                                'estado', estado,
+                                'localizacao', localizacao,
                                 'altitude', altitude,
-                                'levantado', CASE WHEN geom IS NOT NULL THEN true ELSE false END
+                                'validado', validado,
+                                'coordenada_e', coordenada_e,
+                                'coordenada_n', coordenada_n
                             )
                         )
                     )
@@ -325,10 +339,11 @@ app.get('/api/marcos/buscar', async (req, res) => {
 
         const result = await query(`
             SELECT
-                id, codigo, tipo, municipio, estado,
-                latitude, longitude,
-                ST_AsGeoJSON(geom)::json as geojson,
-                status
+                id, codigo, tipo, localizacao,
+                ST_Y(ST_Transform(geometry, 4326)) as latitude,
+                ST_X(ST_Transform(geometry, 4326)) as longitude,
+                ST_AsGeoJSON(ST_Transform(geometry, 4326))::json as geojson,
+                validado
             FROM marcos_levantados
             ${whereClause}
             ORDER BY codigo
@@ -378,14 +393,15 @@ app.get('/api/marcos/:codigo', async (req, res) => {
 
         const result = await query(`
             SELECT
-                id, codigo, tipo, municipio, estado,
+                id, codigo, tipo, localizacao,
                 coordenada_e, coordenada_n, altitude,
-                latitude, longitude,
-                ST_AsGeoJSON(geom)::json as geojson,
-                data_levantamento, metodo,
-                precisao_horizontal, precisao_vertical,
-                observacoes, status,
-                criado_em, atualizado_em
+                ST_Y(ST_Transform(geometry, 4326)) as latitude,
+                ST_X(ST_Transform(geometry, 4326)) as longitude,
+                ST_AsGeoJSON(ST_Transform(geometry, 4326))::json as geojson,
+                data_levantamento, metodo, limites,
+                precisao_e, precisao_n, precisao_h,
+                validado, fonte, observacoes,
+                created_at, updated_at
             FROM marcos_levantados
             WHERE codigo = $1
         `, [codigo]);
@@ -402,17 +418,20 @@ app.get('/api/marcos/:codigo', async (req, res) => {
 });
 
 // POST /api/marcos - Criar novo marco
+// NOTA: Endpoint desabilitado temporariamente - estrutura da tabela foi alterada
+// TODO: Reativar quando necessário, ajustando para a nova estrutura
+/*
 app.post('/api/marcos', async (req, res) => {
     try {
-        const { codigo, tipo, municipio, estado, latitude, longitude, altitude, observacoes } = req.body;
+        const { codigo, tipo, localizacao, latitude, longitude, altitude, observacoes } = req.body;
 
-        console.log('[Criar Marco] Dados recebidos:', { codigo, tipo, municipio, latitude, longitude });
+        console.log('[Criar Marco] Dados recebidos:', { codigo, tipo, localizacao, latitude, longitude });
 
         // Validação
-        if (!codigo || !municipio || !latitude || !longitude) {
+        if (!codigo || !latitude || !longitude) {
             return res.status(400).json({
                 success: false,
-                message: 'Campos obrigatórios: codigo, municipio, latitude, longitude'
+                message: 'Campos obrigatórios: codigo, latitude, longitude'
             });
         }
 
@@ -425,28 +444,23 @@ app.post('/api/marcos', async (req, res) => {
             });
         }
 
-        // Criar geometria PostGIS (SRID 4326 = WGS84)
-        const geomSQL = `ST_SetSRID(ST_MakePoint($1, $2), 4326)`;
-
-        // Inserir marco
+        // Converter lat/lon (EPSG:4326) para UTM (EPSG:31982)
         const result = await query(`
             INSERT INTO marcos_levantados
-            (codigo, tipo, municipio, estado, latitude, longitude, altitude, geom, observacoes, status)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, ${geomSQL}, $8, $9)
-            RETURNING id, codigo, tipo, municipio, estado, latitude, longitude, altitude,
-                      ST_AsGeoJSON(geom)::json as geojson, observacoes, status
+            (codigo, tipo, localizacao, altitude, geometry, validado, observacoes)
+            VALUES ($1, $2, $3, $4, ST_Transform(ST_SetSRID(ST_MakePoint($5, $6), 4326), 31982), true, $7)
+            RETURNING id, codigo, tipo, localizacao, altitude,
+                      ST_Y(ST_Transform(geometry, 4326)) as latitude,
+                      ST_X(ST_Transform(geometry, 4326)) as longitude,
+                      ST_AsGeoJSON(ST_Transform(geometry, 4326))::json as geojson
         `, [
             codigo,
             tipo || 'M',
-            municipio,
-            estado || 'PR',
-            latitude,
-            longitude,
+            localizacao || '',
             altitude || null,
-            longitude, // para geom
-            latitude,  // para geom
-            observacoes || null,
-            'ATIVO'
+            longitude,
+            latitude,
+            observacoes || null
         ]);
 
         console.log('[Criar Marco] ✅ Marco criado com ID:', result.rows[0].id);
@@ -465,8 +479,9 @@ app.post('/api/marcos', async (req, res) => {
         });
     }
 });
+*/
 
-console.log('✅ Endpoint POST /api/marcos carregado');
+console.log('⚠️  Endpoint POST /api/marcos desabilitado temporariamente');
 
 // ============================================
 // ROTAS: CLIENTES E PROPRIEDADES
@@ -798,6 +813,12 @@ console.log('✅ Rota /api/salvar-memorial-completo carregada');
 
 const sigefDownloader = new SIGEFDownloader(pool);
 
+// ============================================
+// ROTAS CAR (Cadastro Ambiental Rural)
+// ============================================
+
+const carDownloader = new CARPRDownloader(pool);
+
 // Iniciar download de um estado
 app.post('/api/sigef/download/:estado', async (req, res) => {
     try {
@@ -981,6 +1002,134 @@ app.get('/api/sigef/parcelas', async (req, res) => {
 });
 
 console.log('✅ Rotas SIGEF carregadas');
+
+// ============================================
+// ENDPOINTS API CAR-PR
+// ============================================
+
+// Sincronizar base CAR-PR (download completo)
+app.post('/api/car/sincronizar-pr', async (req, res) => {
+    try {
+        console.log('🔄 Sincronização manual CAR-PR solicitada');
+        const resultado = await carDownloader.downloadCompleto();
+        res.json({
+            success: true,
+            message: 'Sincronização CAR-PR concluída com sucesso',
+            ...resultado
+        });
+    } catch (error) {
+        console.error('❌ Erro ao sincronizar CAR-PR:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Erro ao sincronizar CAR-PR',
+            error: error.message
+        });
+    }
+});
+
+// Obter estatísticas gerais CAR-PR
+app.get('/api/car/estatisticas-pr', async (req, res) => {
+    try {
+        const stats = await carDownloader.getEstatisticas();
+        const ultimaAtualizacao = await carDownloader.getUltimaAtualizacao();
+
+        res.json({
+            success: true,
+            estatisticas: stats,
+            ultima_atualizacao: ultimaAtualizacao
+        });
+    } catch (error) {
+        console.error('❌ Erro ao buscar estatísticas CAR-PR:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// Obter estatísticas por município
+app.get('/api/car/estatisticas-municipio', async (req, res) => {
+    try {
+        const { municipio } = req.query;
+        const stats = await carDownloader.getEstatisticasMunicipio(municipio);
+
+        res.json({
+            success: true,
+            municipios: stats
+        });
+    } catch (error) {
+        console.error('❌ Erro ao buscar estatísticas por município:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// Buscar imóveis CAR próximos a uma propriedade
+app.get('/api/car/proximos/:propriedadeId', async (req, res) => {
+    try {
+        const { propriedadeId } = req.params;
+        const { distancia } = req.query;
+
+        const result = await query(`
+            SELECT * FROM buscar_car_proximos($1, $2)
+        `, [propriedadeId, distancia || 500]);
+
+        res.json({
+            success: true,
+            propriedade_id: parseInt(propriedadeId),
+            distancia_maxima: parseFloat(distancia || 500),
+            confrontantes: result.rows
+        });
+    } catch (error) {
+        console.error('❌ Erro ao buscar CAR próximos:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// Obter geometria de imóvel CAR específico (para exibir no mapa)
+app.get('/api/car/geometry/:codigoCAR', async (req, res) => {
+    try {
+        const { codigoCAR } = req.params;
+
+        const result = await query(`
+            SELECT
+                id,
+                codigo_car,
+                municipio,
+                area_ha,
+                area_m2,
+                situacao,
+                ST_AsGeoJSON(ST_Transform(geometry, 4326))::json as geometry
+            FROM car_imoveis
+            WHERE codigo_car = $1
+        `, [codigoCAR]);
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'Imóvel CAR não encontrado'
+            });
+        }
+
+        res.json({
+            success: true,
+            ...result.rows[0]
+        });
+    } catch (error) {
+        console.error('❌ Erro ao buscar geometria CAR:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+console.log('✅ Rotas CAR-PR carregadas');
 
 // ============================================
 // ROTAS DE ANÁLISE GEOESPACIAL
@@ -1708,7 +1857,7 @@ app.get('/api/dashboard/estatisticas', async (req, res) => {
         const statsMarcos = await pool.query(`
             SELECT
                 COUNT(*) as total_marcos,
-                COUNT(CASE WHEN latitude IS NOT NULL AND longitude IS NOT NULL THEN 1 END) as marcos_levantados,
+                COUNT(CASE WHEN geometry IS NOT NULL THEN 1 END) as marcos_levantados,
                 COUNT(DISTINCT tipo) as tipos_marcos,
                 COUNT(CASE WHEN observacoes IS NOT NULL THEN 1 END) as com_observacoes
             FROM marcos_levantados
@@ -1789,7 +1938,7 @@ app.get('/api/dashboard/estatisticas', async (req, res) => {
             FROM (
                 SELECT created_at FROM propriedades WHERE created_at >= NOW() - INTERVAL '30 days'
                 UNION ALL
-                SELECT criado_em as created_at FROM marcos_levantados WHERE criado_em >= NOW() - INTERVAL '30 days'
+                SELECT created_at FROM marcos_levantados WHERE created_at >= NOW() - INTERVAL '30 days'
             ) t
             GROUP BY DATE(created_at)
             ORDER BY data DESC
@@ -2014,15 +2163,17 @@ console.log('✅ Rota /api/memorial/upload carregada');
 // =====================================================
 // MÓDULOS CAR
 // =====================================================
-
-const CARDownloader = require('./car-downloader');
-const CARAnalyzer = require('./car-analyzer');
-
-const carDownloader = new CARDownloader(pool);
-const carAnalyzer = new CARAnalyzer(pool);
+// =====================================================
+// ROTAS CAR ANTIGAS (DESCONTINUADAS - Usar CAR-PR)
+// =====================================================
+// Comentado: Sistema antigo substituído por CAR-PR
+// const CARDownloader = require('./car-downloader');
+// const CARAnalyzer = require('./car-analyzer');
+// const carDownloader = new CARDownloader(pool);
+// const carAnalyzer = new CARAnalyzer(pool);
 
 // =====================================================
-// ROTAS CAR - CADASTRO AMBIENTAL RURAL
+// As rotas CAR agora usam o CARPRDownloader (linha 820)
 // =====================================================
 
 // POST /api/car/download/:estado - Iniciar download CAR
@@ -2260,10 +2411,37 @@ app.get('/api/car/conformidade/:propriedadeId', async (req, res) => {
         const propriedade = propResult.rows[0];
         const areaHa = (parseFloat(propriedade.area_calculada) || 0) / 10000;
 
-        // Calcular porcentagens de conformidade (simulado)
-        const reservaLegalMinima = propriedade.tipo === 'RURAL' ? 20 : 0; // 20% para rural
-        const appMinima = 10; // 10% APP
+        // USAR CARAnalyzer para análise real
+        const analiseResult = await carAnalyzer.analisarConformidadeAmbiental(propriedadeId);
 
+        if (!analiseResult.sucesso) {
+            return res.json({
+                sucesso: false,
+                erro: analiseResult.erro || 'Erro ao analisar conformidade'
+            });
+        }
+
+        // Se não tem CAR cadastrado, retornar informação adequada
+        if (!analiseResult.tem_car) {
+            return res.json({
+                sucesso: true,
+                propriedade: {
+                    id: propriedade.id,
+                    nome: propriedade.nome_propriedade,
+                    area_ha: areaHa
+                },
+                tem_car: false,
+                conforme: false,
+                mensagem: analiseResult.mensagem || 'Imóvel não possui CAR cadastrado',
+                recomendacoes: [
+                    'Verificar se o imóvel está cadastrado no CAR (https://www.car.gov.br)',
+                    'Realizar cadastramento no CAR se ainda não foi feito',
+                    'Consultar órgão ambiental estadual sobre exigências específicas'
+                ]
+            });
+        }
+
+        // Retornar análise completa com dados reais do CAR
         res.json({
             sucesso: true,
             propriedade: {
@@ -2271,28 +2449,23 @@ app.get('/api/car/conformidade/:propriedadeId', async (req, res) => {
                 nome: propriedade.nome_propriedade,
                 area_ha: areaHa
             },
-            analise: {
-                reserva_legal: {
-                    percentual_minimo: reservaLegalMinima,
-                    percentual_atual: 0, // Não temos dados reais
-                    conforme: false,
-                    observacao: 'Dados de reserva legal não disponíveis'
-                },
-                app: {
-                    percentual_minimo: appMinima,
-                    percentual_atual: 0,
-                    conforme: false,
-                    observacao: 'Dados de APP não disponíveis'
-                },
-                vegetacao_nativa: {
-                    percentual: 0,
-                    observacao: 'Dados de vegetação nativa não disponíveis'
-                }
-            },
-            recomendacoes: [
-                'Realizar levantamento detalhado da cobertura vegetal',
-                'Verificar áreas de preservação permanente (APP)',
-                'Consultar órgão ambiental estadual sobre exigências específicas'
+            tem_car: true,
+            car_id: analiseResult.car_id,
+            numero_car: analiseResult.numero_car,
+            status_car: analiseResult.status_car,
+            conforme: analiseResult.conforme,
+            nivel_conformidade: analiseResult.nivel_conformidade,
+            areas: analiseResult.areas,
+            percentuais: analiseResult.percentuais,
+            issues: analiseResult.issues || [],
+            recomendacoes: analiseResult.conforme ? [
+                'Imóvel em conformidade com requisitos ambientais básicos',
+                'Manter documentação atualizada',
+                'Realizar monitoramento periódico das áreas de preservação'
+            ] : [
+                'Consultar órgão ambiental estadual para regularização',
+                'Elaborar Plano de Recuperação Ambiental (PRA) se necessário',
+                'Verificar possibilidade de compensação ambiental'
             ]
         });
 
@@ -2553,6 +2726,447 @@ app.get('/api/car/exportar-geojson', async (req, res) => {
     }
 });
 
+// GET /api/car/download-todas-camadas/:propriedadeId - Baixar TODAS as camadas CAR
+app.get('/api/car/download-todas-camadas/:propriedadeId', async (req, res) => {
+    const client = await pool.connect();
+
+    try {
+        const { propriedadeId } = req.params;
+
+        console.log(`\n🌾 Iniciando download de TODAS camadas CAR para propriedade ${propriedadeId}`);
+
+        // 1. Buscar propriedade
+        const propResult = await client.query(
+            'SELECT id, nome_propriedade, geometry FROM propriedades WHERE id = $1',
+            [propriedadeId]
+        );
+
+        if (propResult.rows.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'Propriedade não encontrada'
+            });
+        }
+
+        const propriedade = propResult.rows[0];
+        console.log(`   Propriedade: ${propriedade.nome_propriedade}`);
+
+        // 2. Identificar confrontantes com código CAR
+        const confrontantesResult = await client.query(`
+            SELECT DISTINCT
+                codigo_car,
+                nome_proprietario,
+                municipio
+            FROM vw_confrontantes
+            WHERE propriedade_principal_id = $1
+                AND codigo_car IS NOT NULL
+                AND codigo_car != ''
+        `, [propriedadeId]);
+
+        console.log(`   Confrontantes com CAR: ${confrontantesResult.rows.length}`);
+
+        if (confrontantesResult.rows.length === 0) {
+            return res.json({
+                success: true,
+                message: 'Nenhum confrontante com código CAR encontrado',
+                propriedade_id: propriedadeId,
+                camadas: {
+                    uso_solo: [],
+                    hidrografia: [],
+                    reserva_legal: [],
+                    vegetacao_nativa: [],
+                    app: []
+                },
+                total_features: 0
+            });
+        }
+
+        // 3. Baixar camadas para cada confrontante
+        const camadas = {
+            uso_solo: [],
+            hidrografia: [],
+            reserva_legal: [],
+            vegetacao_nativa: [],
+            app: []
+        };
+
+        const tiposCamada = [
+            { tipo: 'USO_SOLO', nome: 'Uso do Solo', layer: 'USO_SOLO' },
+            { tipo: 'HIDROGRAFIA', nome: 'Hidrografia', layer: 'HIDROGRAFIA' },
+            { tipo: 'RESERVA_LEGAL', nome: 'Reserva Legal', layer: 'RESERVA_LEGAL' },
+            { tipo: 'VEGETACAO_NATIVA', nome: 'Vegetação Nativa', layer: 'VEGETACAO_NATIVA' },
+            { tipo: 'APP', nome: 'APP', layer: 'APP' }
+        ];
+
+        for (const confrontante of confrontantesResult.rows) {
+            console.log(`\n   📥 Baixando camadas de: ${confrontante.nome_proprietario || confrontante.codigo_car}`);
+
+            for (const camada of tiposCamada) {
+                try {
+                    // Buscar camada no banco car_downloads (tabela de download WFS)
+                    const camadaResult = await client.query(`
+                        SELECT
+                            id,
+                            codigo_imovel,
+                            tipo_camada,
+                            nome_camada,
+                            geometry,
+                            properties,
+                            area_m2
+                        FROM car_downloads
+                        WHERE codigo_imovel = $1
+                            AND tipo_camada = $2
+                            AND geometry IS NOT NULL
+                    `, [confrontante.codigo_car, camada.tipo]);
+
+                    if (camadaResult.rows.length > 0) {
+                        // Inserir na tabela car_camadas
+                        for (const feature of camadaResult.rows) {
+                            await client.query(`
+                                INSERT INTO car_camadas (
+                                    propriedade_id,
+                                    codigo_car,
+                                    tipo_camada,
+                                    nome_camada,
+                                    geometry,
+                                    properties,
+                                    area_m2,
+                                    fonte,
+                                    ativo
+                                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                                ON CONFLICT DO NOTHING
+                            `, [
+                                propriedadeId,
+                                confrontante.codigo_car,
+                                camada.tipo,
+                                feature.nome_camada || camada.nome,
+                                feature.geometry,
+                                feature.properties || {},
+                                feature.area_m2,
+                                'WFS_IAT',
+                                true
+                            ]);
+                        }
+
+                        const key = camada.tipo.toLowerCase();
+                        camadas[key].push(...camadaResult.rows);
+
+                        console.log(`      ✅ ${camada.nome}: ${camadaResult.rows.length} features`);
+                    } else {
+                        console.log(`      ⚠️  ${camada.nome}: sem dados`);
+                    }
+
+                } catch (camadaError) {
+                    console.error(`      ❌ Erro ao baixar ${camada.nome}:`, camadaError.message);
+                }
+            }
+        }
+
+        // 4. Calcular totais
+        const totalFeatures = Object.values(camadas).reduce((sum, arr) => sum + arr.length, 0);
+
+        console.log(`\n✅ Download concluído!`);
+        console.log(`   Total de features: ${totalFeatures}`);
+        console.log(`   - Uso do Solo: ${camadas.uso_solo.length}`);
+        console.log(`   - Hidrografia: ${camadas.hidrografia.length}`);
+        console.log(`   - Reserva Legal: ${camadas.reserva_legal.length}`);
+        console.log(`   - Vegetação Nativa: ${camadas.vegetacao_nativa.length}`);
+        console.log(`   - APP: ${camadas.app.length}\n`);
+
+        res.json({
+            success: true,
+            message: 'Camadas CAR baixadas com sucesso',
+            propriedade_id: propriedadeId,
+            confrontantes_processados: confrontantesResult.rows.length,
+            camadas: {
+                uso_solo: camadas.uso_solo.length,
+                hidrografia: camadas.hidrografia.length,
+                reserva_legal: camadas.reserva_legal.length,
+                vegetacao_nativa: camadas.vegetacao_nativa.length,
+                app: camadas.app.length
+            },
+            total_features: totalFeatures
+        });
+
+    } catch (error) {
+        console.error('❌ Erro ao baixar camadas CAR:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Erro ao baixar camadas CAR',
+            error: error.message
+        });
+    } finally {
+        client.release();
+    }
+});
+
+// GET /api/car/camadas/:propriedadeId - Buscar camadas CAR já baixadas
+app.get('/api/car/camadas/:propriedadeId', async (req, res) => {
+    try {
+        const { propriedadeId } = req.params;
+        const { tipo_camada } = req.query; // Filtrar por tipo específico (opcional)
+
+        let sql = `
+            SELECT
+                id,
+                propriedade_id,
+                codigo_car,
+                tipo_camada,
+                nome_camada,
+                ST_AsGeoJSON(ST_Transform(geometry, 4326))::json as geometry,
+                properties,
+                area_m2,
+                data_download,
+                fonte
+            FROM car_camadas
+            WHERE propriedade_id = $1
+                AND ativo = TRUE
+        `;
+
+        const params = [propriedadeId];
+
+        if (tipo_camada) {
+            sql += ' AND tipo_camada = $2';
+            params.push(tipo_camada);
+        }
+
+        sql += ' ORDER BY tipo_camada, data_download DESC';
+
+        const result = await query(sql, params);
+
+        // Agrupar por tipo de camada
+        const camadasPorTipo = {
+            uso_solo: [],
+            hidrografia: [],
+            reserva_legal: [],
+            vegetacao_nativa: [],
+            app: []
+        };
+
+        result.rows.forEach(row => {
+            const feature = {
+                type: 'Feature',
+                properties: {
+                    id: row.id,
+                    codigo_car: row.codigo_car,
+                    tipo_camada: row.tipo_camada,
+                    nome_camada: row.nome_camada,
+                    area_m2: parseFloat(row.area_m2),
+                    area_ha: parseFloat(row.area_m2) / 10000,
+                    data_download: row.data_download,
+                    fonte: row.fonte,
+                    ...row.properties
+                },
+                geometry: row.geometry
+            };
+
+            const key = row.tipo_camada.toLowerCase();
+            if (camadasPorTipo[key]) {
+                camadasPorTipo[key].push(feature);
+            }
+        });
+
+        res.json({
+            success: true,
+            propriedade_id: propriedadeId,
+            total_features: result.rows.length,
+            camadas: {
+                uso_solo: {
+                    type: 'FeatureCollection',
+                    features: camadasPorTipo.uso_solo
+                },
+                hidrografia: {
+                    type: 'FeatureCollection',
+                    features: camadasPorTipo.hidrografia
+                },
+                reserva_legal: {
+                    type: 'FeatureCollection',
+                    features: camadasPorTipo.reserva_legal
+                },
+                vegetacao_nativa: {
+                    type: 'FeatureCollection',
+                    features: camadasPorTipo.vegetacao_nativa
+                },
+                app: {
+                    type: 'FeatureCollection',
+                    features: camadasPorTipo.app
+                }
+            },
+            totais_por_tipo: {
+                uso_solo: camadasPorTipo.uso_solo.length,
+                hidrografia: camadasPorTipo.hidrografia.length,
+                reserva_legal: camadasPorTipo.reserva_legal.length,
+                vegetacao_nativa: camadasPorTipo.vegetacao_nativa.length,
+                app: camadasPorTipo.app.length
+            }
+        });
+
+    } catch (error) {
+        console.error('❌ Erro ao buscar camadas CAR:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Erro ao buscar camadas CAR',
+            error: error.message
+        });
+    }
+});
+
+// GET /api/car/baixar-geopr/:propriedadeId - Baixar CAR via GeoPR (NOVO!)
+app.get('/api/car/baixar-geopr/:propriedadeId', async (req, res) => {
+    const client = await pool.connect();
+
+    try {
+        const { propriedadeId } = req.params;
+
+        console.log(`\n🌾 Download CAR via GeoPR para propriedade ${propriedadeId}`);
+
+        // 1. Buscar propriedade
+        const propResult = await client.query(
+            'SELECT id, nome_propriedade FROM propriedades WHERE id = $1',
+            [propriedadeId]
+        );
+
+        if (propResult.rows.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'Propriedade não encontrada'
+            });
+        }
+
+        // 2. Usar SpatialAnalyzer para identificar confrontantes
+        const SpatialAnalyzer = require('./spatial-analyzer');
+        const spatialAnalyzer = new SpatialAnalyzer(pool);
+
+        const analiseResult = await spatialAnalyzer.identificarConfrontantes(propriedadeId, 500);
+
+        if (!analiseResult.sucesso) {
+            return res.json({
+                success: true,
+                message: 'Erro ao identificar confrontantes',
+                confrontantes_processados: 0,
+                imoveis_baixados: 0
+            });
+        }
+
+        const confrontantes = analiseResult.confrontantes || [];
+
+        // Filtrar apenas confrontantes com código CAR
+        const confrontantesComCAR = confrontantes.filter(c => c.codigo_car);
+
+        console.log(`   Confrontantes total: ${confrontantes.length}`);
+        console.log(`   Confrontantes com CAR: ${confrontantesComCAR.length}`);
+
+        if (confrontantesComCAR.length === 0) {
+            return res.json({
+                success: true,
+                message: 'Nenhum confrontante com código CAR',
+                confrontantes_processados: confrontantes.length,
+                imoveis_baixados: 0
+            });
+        }
+
+        // 3. Baixar de cada confrontante via GeoPR WFS
+        let imoveisBaixados = 0;
+
+        for (const confrontante of confrontantesComCAR) {
+            try {
+                const codigoCAR = confrontante.codigo_car;
+                console.log(`\n   📥 Baixando: ${codigoCAR}`);
+
+                // URL WFS GeoPR
+                const wfsUrl = `https://geoserver.pr.gov.br/geoserver/wfs?` +
+                    `service=WFS&version=2.0.0&request=GetFeature&` +
+                    `typeName=base_geo:area_imovel_car&` +
+                    `outputFormat=application/json&` +
+                    `CQL_FILTER=codigo_car='${codigoCAR}'`;
+
+                // Download via fetch
+                const fetch = (await import('node-fetch')).default;
+                const wfsResponse = await fetch(wfsUrl, { timeout: 30000 });
+
+                if (!wfsResponse.ok) {
+                    console.warn(`      ⚠️  HTTP ${wfsResponse.status}`);
+                    continue;
+                }
+
+                const geojson = await wfsResponse.json();
+
+                if (!geojson.features || geojson.features.length === 0) {
+                    console.warn(`      ⚠️  Sem dados no GeoPR`);
+                    continue;
+                }
+
+                // Inserir cada feature
+                for (const feature of geojson.features) {
+                    try {
+                        await client.query(`
+                            INSERT INTO car_camadas (
+                                propriedade_id,
+                                codigo_car,
+                                tipo_camada,
+                                nome_camada,
+                                geometry,
+                                properties,
+                                fonte,
+                                ativo
+                            ) VALUES (
+                                $1, $2, $3, $4,
+                                ST_GeomFromGeoJSON($5),
+                                $6, $7, $8
+                            )
+                            ON CONFLICT (codigo_car, tipo_camada)
+                            DO UPDATE SET
+                                geometry = EXCLUDED.geometry,
+                                properties = EXCLUDED.properties,
+                                data_download = NOW(),
+                                updated_at = NOW()
+                        `, [
+                            propriedadeId,
+                            codigoCAR,
+                            'AREA_IMOVEL',
+                            confrontante.nome_proprietario || 'Imóvel CAR',
+                            JSON.stringify(feature.geometry),
+                            JSON.stringify(feature.properties),
+                            'GeoPR',
+                            true
+                        ]);
+
+                        imoveisBaixados++;
+                        console.log(`      ✅ Imóvel salvo`);
+
+                    } catch (insertError) {
+                        console.error(`      ❌ Erro ao inserir:`, insertError.message);
+                    }
+                }
+
+            } catch (downloadError) {
+                console.error(`      ❌ Erro ao baixar ${confrontante.codigo_car}:`, downloadError.message);
+            }
+        }
+
+        console.log(`\n✅ Download concluído: ${imoveisBaixados} imóveis`);
+
+        res.json({
+            success: true,
+            message: `${imoveisBaixados} imóveis CAR baixados com sucesso`,
+            propriedade_id: propriedadeId,
+            confrontantes_processados: confrontantesComCAR.length,
+            imoveis_baixados: imoveisBaixados,
+            fonte: 'GeoPR'
+        });
+
+    } catch (error) {
+        console.error('❌ Erro geral:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Erro ao baixar CAR via GeoPR',
+            error: error.message
+        });
+    } finally {
+        client.release();
+    }
+});
+
 console.log('✅ Rotas CAR carregadas');
 
 // ============================================
@@ -2682,7 +3296,162 @@ app.get('/api/car/wfs/testar', async (req, res) => {
     }
 });
 
-console.log('✅ Rotas WFS CAR carregadas');
+// GET /api/atualizar-dados - Endpoint único para atualização manual (CAR + SIGEF)
+app.get('/api/atualizar-dados', async (req, res) => {
+    try {
+        console.log('\n🔄 Atualização manual solicitada via API');
+
+        // Responder imediatamente
+        res.json({
+            sucesso: true,
+            mensagem: 'Atualização de dados CAR e SIGEF iniciada em background',
+            info: 'Acompanhe o progresso pelos logs do servidor'
+        });
+
+        // Executar sincronização em background
+        sincronizarDadosInicializacao();
+
+    } catch (error) {
+        console.error('❌ Erro ao iniciar atualização:', error);
+        res.status(500).json({
+            sucesso: false,
+            erro: error.message
+        });
+    }
+});
+
+// POST /api/car/sincronizar/estado/:estado - Sincronizar CAR de um estado específico
+app.post('/api/car/sincronizar/estado/:estado', async (req, res) => {
+    try {
+        const { estado } = req.params;
+
+        console.log(`🔄 Solicitação de sincronização: ${estado}`);
+
+        // Responder imediatamente ao cliente
+        res.json({
+            sucesso: true,
+            mensagem: `Sincronização de ${estado} iniciada em background`,
+            estado
+        });
+
+        // Processar em background
+        wfsDownloader.sincronizarEstado(estado, (progresso) => {
+            console.log(`   📊 ${estado}: ${progresso.totalProcessados} imóveis processados`);
+        }).then(resultado => {
+            console.log(`✅ Sincronização ${estado} concluída:`, resultado);
+        }).catch(error => {
+            console.error(`❌ Erro na sincronização ${estado}:`, error);
+        });
+
+    } catch (error) {
+        console.error('❌ Erro ao iniciar sincronização:', error);
+        res.status(500).json({
+            sucesso: false,
+            erro: error.message
+        });
+    }
+});
+
+// POST /api/car/sincronizar/multiplos - Sincronizar múltiplos estados
+app.post('/api/car/sincronizar/multiplos', async (req, res) => {
+    try {
+        const { estados } = req.body;
+
+        if (!Array.isArray(estados) || estados.length === 0) {
+            return res.status(400).json({
+                sucesso: false,
+                erro: 'Parâmetro "estados" deve ser um array não vazio'
+            });
+        }
+
+        console.log(`🔄 Solicitação de sincronização múltipla: ${estados.join(', ')}`);
+
+        // Responder imediatamente ao cliente
+        res.json({
+            sucesso: true,
+            mensagem: `Sincronização de ${estados.length} estados iniciada em background`,
+            estados
+        });
+
+        // Processar em background
+        wfsDownloader.sincronizarMultiplosEstados(estados, (progresso) => {
+            console.log(`   📊 ${progresso.estado}: ${progresso.totalProcessados} imóveis processados`);
+        }).then(resultado => {
+            console.log(`✅ Sincronização múltipla concluída:`, resultado);
+        }).catch(error => {
+            console.error(`❌ Erro na sincronização múltipla:`, error);
+        });
+
+    } catch (error) {
+        console.error('❌ Erro ao iniciar sincronização múltipla:', error);
+        res.status(500).json({
+            sucesso: false,
+            erro: error.message
+        });
+    }
+});
+
+// POST /api/car/sincronizar/automatico - Sincronização automática inteligente
+app.post('/api/car/sincronizar/automatico', async (req, res) => {
+    try {
+        console.log(`🤖 Solicitação de sincronização automática inteligente`);
+
+        // Responder imediatamente ao cliente
+        res.json({
+            sucesso: true,
+            mensagem: 'Sincronização automática iniciada. Detectando estados das propriedades cadastradas...'
+        });
+
+        // Processar em background
+        wfsDownloader.sincronizarAutomatico((progresso) => {
+            if (progresso.estado) {
+                console.log(`   📊 ${progresso.estado}: ${progresso.totalProcessados} imóveis processados`);
+            }
+        }).then(resultado => {
+            console.log(`✅ Sincronização automática concluída:`, resultado);
+        }).catch(error => {
+            console.error(`❌ Erro na sincronização automática:`, error);
+        });
+
+    } catch (error) {
+        console.error('❌ Erro ao iniciar sincronização automática:', error);
+        res.status(500).json({
+            sucesso: false,
+            erro: error.message
+        });
+    }
+});
+
+// POST /api/car/sincronizar/parana - Sincronizar CAR do Paraná via GeoPR (otimizado)
+app.post('/api/car/sincronizar/parana', async (req, res) => {
+    try {
+        console.log(`🌲 Solicitação de sincronização GeoPR Paraná`);
+
+        // Responder imediatamente ao cliente
+        res.json({
+            sucesso: true,
+            mensagem: 'Download GeoPR Paraná iniciado. Usando fonte otimizada IAT-PR...'
+        });
+
+        // Processar em background
+        wfsDownloader.downloadCARParana((progresso) => {
+            console.log(`   📊 GeoPR: ${progresso.totalProcessados}/${progresso.total || '?'} imóveis (${progresso.percentual || 0}%)`);
+        }).then(resultado => {
+            console.log(`✅ GeoPR Paraná concluído:`, resultado);
+        }).catch(error => {
+            console.error(`❌ Erro no GeoPR Paraná:`, error);
+        });
+
+    } catch (error) {
+        console.error('❌ Erro ao iniciar GeoPR:', error);
+        res.status(500).json({
+            sucesso: false,
+            erro: error.message
+        });
+    }
+});
+
+console.log('✅ Rotas WFS CAR carregadas (com sincronização automática)');
 
 // ============================================
 // ROTAS: CAR ZIP UPLOADER (Upload Manual de ZIP)
@@ -2907,6 +3676,86 @@ app.use((err, req, res, next) => {
 // INICIAR SERVIDOR
 // ============================================
 
+// Função de sincronização automática CAR + SIGEF
+async function sincronizarDadosInicializacao() {
+    console.log('\n' + '='.repeat(60));
+    console.log('🔄 INICIANDO SINCRONIZAÇÃO AUTOMÁTICA DE DADOS');
+    console.log('='.repeat(60) + '\n');
+
+    try {
+        // 1. Sincronizar CAR-PR automaticamente
+        console.log('📦 [1/2] Sincronizando dados CAR-PR...');
+
+        try {
+            const precisaSincronizar = await carDownloader.precisaSincronizar(7); // 7 dias
+
+            if (precisaSincronizar.precisa) {
+                console.log(`   🔄 ${precisaSincronizar.motivo}`);
+                const resultado = await carDownloader.downloadCompleto();
+                console.log(`   ✅ CAR-PR sincronizado: ${resultado.total} imóveis (${resultado.inseridos} novos, ${resultado.atualizados} atualizados)\n`);
+            } else {
+                console.log(`   ⏭️  ${precisaSincronizar.motivo}\n`);
+                const stats = await carDownloader.getEstatisticas();
+                if (stats && parseInt(stats.total_imoveis) > 0) {
+                    console.log(`   📊 Base atual: ${stats.total_imoveis} imóveis CAR-PR\n`);
+                }
+            }
+        } catch (carError) {
+            console.error(`   ❌ Erro na sincronização CAR-PR:`, carError.message, '\n');
+        }
+
+        // 2. Sincronizar SIGEF (se houver downloader implementado)
+        console.log('📦 [2/2] Verificando dados SIGEF...');
+
+        try {
+            // Verificar se a tabela parcelas_sigef existe
+            const tableCheck = await pool.query(`
+                SELECT EXISTS (
+                    SELECT FROM information_schema.tables
+                    WHERE table_name = 'parcelas_sigef'
+                )
+            `);
+
+            if (!tableCheck.rows[0].exists) {
+                console.log(`   ⚠️  SIGEF: Tabela não encontrada (execute setup inicial)\n`);
+            } else {
+                // Verificar se há dados SIGEF desatualizados (exemplo: > 30 dias)
+                const sigefCheck = await pool.query(`
+                    SELECT
+                        COUNT(*) as total_parcelas,
+                        MAX(updated_at) as ultima_atualizacao,
+                        EXTRACT(DAY FROM NOW() - MAX(updated_at)) as dias_desde_atualizacao
+                    FROM parcelas_sigef
+                `);
+
+                if (sigefCheck.rows[0].total_parcelas > 0) {
+                    const diasDesdeAtualizacao = parseInt(sigefCheck.rows[0].dias_desde_atualizacao || 999);
+                    console.log(`   ℹ️  SIGEF: ${sigefCheck.rows[0].total_parcelas} parcelas cadastradas`);
+                    console.log(`   ℹ️  Última atualização: ${diasDesdeAtualizacao} dias atrás`);
+
+                    if (diasDesdeAtualizacao > 30) {
+                        console.log(`   ⚠️  SIGEF precisa atualização (>30 dias)\n`);
+                    } else {
+                        console.log(`   ✅ SIGEF atualizado\n`);
+                    }
+                } else {
+                    console.log(`   ⚠️  SIGEF: Nenhuma parcela cadastrada (execute importação inicial)\n`);
+                }
+            }
+        } catch (sigefError) {
+            console.log(`   ⚠️  SIGEF: Erro ao verificar (${sigefError.message})\n`);
+        }
+
+        console.log('='.repeat(60));
+        console.log('✅ SINCRONIZAÇÃO AUTOMÁTICA CONCLUÍDA');
+        console.log('='.repeat(60) + '\n');
+
+    } catch (error) {
+        console.error('\n❌ Erro na sincronização automática:', error.message);
+        console.log('⚠️  Servidor continuará funcionando normalmente\n');
+    }
+}
+
 app.listen(PORT, () => {
     console.log(`\n${'='.repeat(60)}`);
     console.log('🚀 SERVIDOR POSTGRESQL + POSTGIS INICIADO');
@@ -2922,6 +3771,11 @@ app.listen(PORT, () => {
         if (health.status === 'OK') {
             console.log('✅ PostgreSQL conectado');
             console.log(`🐘 Versão: ${health.version}\n`);
+
+            // Iniciar sincronização automática após 5 segundos
+            setTimeout(() => {
+                sincronizarDadosInicializacao();
+            }, 5000);
         } else {
             console.error('❌ Falha ao conectar PostgreSQL:', health.error);
         }

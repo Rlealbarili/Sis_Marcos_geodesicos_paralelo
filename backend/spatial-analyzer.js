@@ -61,28 +61,65 @@ class SpatialAnalyzer {
         }
     }
 
-    // Identificar confrontantes
+    // Identificar confrontantes (SIGEF + CAR)
     async identificarConfrontantes(propriedadeId, raioMetros = 500) {
         try {
             console.log(`🔍 Identificando confrontantes: Propriedade #${propriedadeId}`);
 
-            const result = await this.pool.query(`
+            // 1. Buscar confrontantes SIGEF
+            const sigefResult = await this.pool.query(`
                 SELECT * FROM identificar_confrontantes($1, $2)
             `, [propriedadeId, raioMetros]);
 
-            const confrontantes = result.rows;
+            const confrontantesSIGEF = sigefResult.rows;
 
-            console.log(`📊 ${confrontantes.length} confrontantes encontrados`);
+            console.log(`📊 ${confrontantesSIGEF.length} confrontantes SIGEF encontrados`);
 
-            // Salvar na tabela
-            for (const c of confrontantes) {
+            // 2. Buscar confrontantes CAR
+            let confrontantesCAR = [];
+            try {
+                const carResult = await this.pool.query(`
+                    SELECT * FROM buscar_car_proximos($1, $2)
+                `, [propriedadeId, raioMetros]);
+
+                confrontantesCAR = carResult.rows.map(row => ({
+                    car_id: row.car_id,
+                    codigo_car: row.codigo_car,
+                    nome_proprietario: `Imóvel CAR - ${row.municipio}`,
+                    tipo_confrontacao: row.intersecta ? 'Sobreposição' : 'Próximo',
+                    municipio: row.municipio,
+                    area_ha: parseFloat(row.area_ha || 0),
+                    distancia_m: parseFloat(row.distancia_m || 0),
+                    azimute_graus: parseFloat(row.azimute || 0),
+                    situacao: row.situacao,
+                    fonte: 'CAR'
+                }));
+
+                console.log(`🌾 ${confrontantesCAR.length} confrontantes CAR encontrados`);
+            } catch (carError) {
+                console.warn('⚠️  Erro ao buscar confrontantes CAR:', carError.message);
+                // Continua sem confrontantes CAR
+            }
+
+            // 3. Salvar confrontantes SIGEF na tabela
+            for (const c of confrontantesSIGEF) {
                 await this.salvarConfrontante(propriedadeId, c);
             }
 
+            // 4. Combinar resultados
+            const todosConfrontantes = [
+                ...confrontantesSIGEF,
+                ...confrontantesCAR
+            ];
+
+            console.log(`✅ Total: ${todosConfrontantes.length} confrontantes (${confrontantesSIGEF.length} SIGEF + ${confrontantesCAR.length} CAR)`);
+
             return {
                 sucesso: true,
-                total_confrontantes: confrontantes.length,
-                confrontantes: confrontantes
+                total_confrontantes: todosConfrontantes.length,
+                total_sigef: confrontantesSIGEF.length,
+                total_car: confrontantesCAR.length,
+                confrontantes: todosConfrontantes
             };
 
         } catch (error) {
